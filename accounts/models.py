@@ -113,28 +113,41 @@ class UserSession(BaseModel):
         return f"{self.user.email} - {self.session_key}"
 
 
-class PasswordResetToken(BaseModel):
+class PasswordResetCode(BaseModel):
     """
-    Store password reset tokens.
+    Store password reset codes (6-digit numeric codes).
     """
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
-    token = models.CharField(max_length=100, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_codes')
+    code = models.CharField(max_length=6, unique=True)
     is_used = models.BooleanField(default=False)
     expires_at = models.DateTimeField()
+    attempts = models.IntegerField(default=0)
+    max_attempts = models.IntegerField(default=3)
     
     class Meta:
-        db_table = 'password_reset_tokens'
-        verbose_name = 'Password Reset Token'
-        verbose_name_plural = 'Password Reset Tokens'
+        db_table = 'password_reset_codes'
+        verbose_name = 'Password Reset Code'
+        verbose_name_plural = 'Password Reset Codes'
     
     def __str__(self):
-        return f"Password reset token for {self.user.email}"
+        return f"Password reset code for {self.user.email}"
     
     def is_expired(self):
-        """Check if token is expired."""
+        """Check if code is expired."""
         return timezone.now() > self.expires_at
     
     def is_valid(self):
-        """Check if token is valid."""
-        return not self.is_used and not self.is_expired()
+        """Check if code is valid."""
+        return not self.is_used and not self.is_expired() and self.attempts < self.max_attempts
+    
+    def increment_attempts(self):
+        """Increment the number of attempts."""
+        self.attempts += 1
+        self.save()
+    
+    @classmethod
+    def generate_code(cls):
+        """Generate a 6-digit numeric code."""
+        import random
+        return str(random.randint(100000, 999999))

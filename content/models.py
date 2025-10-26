@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from core.models import AuditModel
 from core.utils import StringHelper
+import re
 
 User = get_user_model()
 
@@ -91,12 +92,14 @@ class Article(AuditModel):
     excerpt = models.TextField(max_length=500, blank=True, null=True)
     content = models.TextField()
     featured_image = models.ImageField(upload_to='articles/', blank=True, null=True)
+    featured_image_url = models.URLField(blank=True, null=True, help_text="URL for featured image (alternative to file upload)")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal')
     
     # Relationships
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='articles')
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    primary_category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='primary_articles')
+    secondary_categories = models.ManyToManyField(Category, blank=True, related_name='secondary_articles')
     tags = models.ManyToManyField(Tag, blank=True)
     
     # SEO fields
@@ -106,6 +109,13 @@ class Article(AuditModel):
     # Publishing
     published_at = models.DateTimeField(null=True, blank=True)
     scheduled_at = models.DateTimeField(null=True, blank=True)
+    
+    # Category Auto-Archiving
+    primary_category_expires_at = models.DateTimeField(null=True, blank=True, help_text="When to auto-archive from primary category")
+    primary_category_archived_at = models.DateTimeField(null=True, blank=True, help_text="When article was archived from primary category")
+    secondary_categories_expire_at = models.DateTimeField(null=True, blank=True, help_text="When to auto-archive from secondary categories")
+    secondary_categories_archived_at = models.DateTimeField(null=True, blank=True, help_text="When article was archived from secondary categories")
+    archived_secondary_categories = models.ManyToManyField(Category, blank=True, related_name='archived_secondary_articles', help_text="Secondary categories this article has been archived from")
     
     # Analytics
     view_count = models.PositiveIntegerField(default=0)
@@ -148,6 +158,15 @@ class Article(AuditModel):
         return self.status == 'published' and self.published_at is not None
     
     @property
+    def featured_image_display_url(self):
+        """Get featured image URL from either file field or URL field."""
+        if self.featured_image:
+            return self.featured_image.url
+        elif self.featured_image_url:
+            return self.featured_image_url
+        return None
+    
+    @property
     def reading_time(self):
         """Estimate reading time in minutes."""
         word_count = len(self.content.split())
@@ -157,6 +176,160 @@ class Article(AuditModel):
         """Increment view count."""
         self.view_count += 1
         self.save(update_fields=['view_count'])
+    
+    @property
+    def is_primary_category_active(self):
+        """Check if article is still active in primary category."""
+        if not self.primary_category:
+            return False
+        
+        # If manually archived, it's not active
+        if self.primary_category_archived_at:
+            return False
+        
+        # If auto-archiving is set and expired
+        if self.primary_category_expires_at and timezone.now() > self.primary_category_expires_at:
+            return False
+        
+        return True
+    
+    @property
+    def is_secondary_categories_active(self):
+        """Check if article is still active in secondary categories."""
+        if not self.secondary_categories.exists():
+            return False
+        
+        # If manually archived (old method), it's not active
+        if self.secondary_categories_archived_at:
+            return False
+        
+        # If auto-archiving is set and expired
+        if self.secondary_categories_expire_at and timezone.now() > self.secondary_categories_expire_at:
+            return False
+        
+        return True
+    
+    def archive_from_primary_category(self, manual=True):
+        """Archive article from primary category."""
+        if self.primary_category:
+            self.primary_category_archived_at = timezone.now()
+            self.save(update_fields=['primary_category_archived_at'])
+            return True
+        return False
+    
+    def archive_from_secondary_categories(self, manual=True):
+        """Archive article from secondary categories."""
+        if self.secondary_categories.exists():
+            self.secondary_categories_archived_at = timezone.now()
+            self.save(update_fields=['secondary_categories_archived_at'])
+            return True
+        return False
+    
+    def archive_from_specific_secondary_category(self, category, manual=True):
+        """Archive article from a specific secondary category."""
+        if not self.secondary_categories.filter(id=category.id).exists():
+            return False, "Article is not in this secondary category"
+        
+        # Add to archived secondary categories
+        self.archived_secondary_categories.add(category)
+        
+        # Remove from active secondary categories
+        self.secondary_categories.remove(category)
+        
+        return True, f"Article archived from {category.name}"
+    
+    def restore_from_specific_secondary_category(self, category):
+        """Restore article to a specific secondary category."""
+        if not self.archived_secondary_categories.filter(id=category.id).exists():
+            return False, "Article was not archived from this secondary category"
+        
+        # Remove from archived secondary categories
+        self.archived_secondary_categories.remove(category)
+        
+        # Add back to active secondary categories
+        self.secondary_categories.add(category)
+        
+        return True, f"Article restored to {category.name}"
+    
+    def get_active_secondary_categories(self):
+        """Get secondary categories that are currently active (not archived)."""
+        return self.secondary_categories.all()
+    
+    def get_archived_secondary_categories(self):
+        """Get secondary categories that have been archived."""
+        return self.archived_secondary_categories.all()
+    
+    def is_active_in_secondary_category(self, category):
+        """Check if article is active in a specific secondary category."""
+        return self.secondary_categories.filter(id=category.id).exists()
+    
+    def is_archived_from_secondary_category(self, category):
+        """Check if article is archived from a specific secondary category."""
+        return self.archived_secondary_categories.filter(id=category.id).exists()
+    
+    def set_primary_category_duration(self, hours=None, days=None):
+        """Set auto-archiving duration for primary category."""
+        if hours:
+            self.primary_category_expires_at = timezone.now() + timezone.timedelta(hours=hours)
+        elif days:
+            self.primary_category_expires_at = timezone.now() + timezone.timedelta(days=days)
+        else:
+            self.primary_category_expires_at = None
+        self.save(update_fields=['primary_category_expires_at'])
+    
+    def set_secondary_categories_duration(self, hours=None, days=None):
+        """Set auto-archiving duration for secondary categories."""
+        if hours:
+            self.secondary_categories_expire_at = timezone.now() + timezone.timedelta(hours=hours)
+        elif days:
+            self.secondary_categories_expire_at = timezone.now() + timezone.timedelta(days=days)
+        else:
+            self.secondary_categories_expire_at = None
+        self.save(update_fields=['secondary_categories_expire_at'])
+    
+    def extract_media_urls_from_content(self):
+        """Extract media URLs from article content."""
+        media_urls = []
+        
+        # Pattern to match img tags with src attributes
+        img_pattern = r'<img[^>]+src=["\']([^"\']+)["\'][^>]*>'
+        img_matches = re.findall(img_pattern, self.content)
+        
+        # Pattern to match video tags with src attributes
+        video_pattern = r'<video[^>]+src=["\']([^"\']+)["\'][^>]*>'
+        video_matches = re.findall(video_pattern, self.content)
+        
+        # Pattern to match source tags within video elements
+        source_pattern = r'<source[^>]+src=["\']([^"\']+)["\'][^>]*>'
+        source_matches = re.findall(source_pattern, self.content)
+        
+        # Combine all matches
+        all_urls = img_matches + video_matches + source_matches
+        
+        # Filter out external URLs (only include URLs from our media files)
+        for url in all_urls:
+            if '/media/' in url:
+                media_urls.append(url)
+        
+        return media_urls
+    
+    def get_inline_media_files(self):
+        """Get MediaFile objects referenced in the article content."""
+        media_urls = self.extract_media_urls_from_content()
+        media_files = []
+        
+        for url in media_urls:
+            # Extract filename from URL
+            filename = url.split('/')[-1]
+            try:
+                # Try to find the media file by filename
+                media_file = MediaFile.objects.filter(file__icontains=filename).first()
+                if media_file:
+                    media_files.append(media_file)
+            except MediaFile.DoesNotExist:
+                continue
+        
+        return media_files
 
 
 class MediaFile(AuditModel):
@@ -205,6 +378,78 @@ class MediaFile(AuditModel):
     def is_image(self):
         """Check if file is an image."""
         return self.file_type == 'image'
+
+
+class Video(AuditModel):
+    """
+    Video model for storing and managing video content.
+    """
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('pending', 'Pending Review'),
+        ('published', 'Published'),
+        ('archived', 'Archived'),
+    ]
+    
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200, unique=True)
+    description = models.TextField(max_length=1000, blank=True, null=True)
+    video_file = models.FileField(upload_to='videos/')
+    thumbnail = models.ImageField(upload_to='videos/thumbnails/', blank=True, null=True)
+    duration = models.PositiveIntegerField(default=0, help_text="Duration in seconds")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    
+    # Relationships
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='videos')
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='videos')
+    tags = models.ManyToManyField(Tag, blank=True, related_name='videos')
+    
+    # Metadata
+    file_size = models.PositiveIntegerField(default=0, help_text="File size in bytes")
+    mime_type = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Publishing
+    published_at = models.DateTimeField(null=True, blank=True)
+    
+    # Analytics
+    view_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
+    share_count = models.PositiveIntegerField(default=0)
+    
+    # Content settings
+    allow_comments = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'videos'
+        verbose_name = 'Video'
+        verbose_name_plural = 'Videos'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return self.title
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate slug if not provided."""
+        if not self.slug:
+            self.slug = StringHelper.slugify(self.title)
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_published(self):
+        """Check if video is published."""
+        return self.status == 'published' and self.published_at is not None
+    
+    @property
+    def file_size_mb(self):
+        """Return file size in MB."""
+        return round(self.file_size / (1024 * 1024), 2)
+    
+    def increment_view_count(self):
+        """Increment view count."""
+        self.view_count += 1
+        self.save(update_fields=['view_count'])
 
 
 class ArticleView(AuditModel):

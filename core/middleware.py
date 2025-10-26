@@ -7,8 +7,11 @@ import time
 from django.utils.deprecation import MiddlewareMixin
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,43 @@ class CORSMiddleware(MiddlewareMixin):
             response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
             response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
             response['Access-Control-Allow-Credentials'] = 'true'
+        
+        return response
+
+
+class JWTTokenRefreshMiddleware(MiddlewareMixin):
+    """
+    Middleware to automatically refresh JWT tokens when they're about to expire.
+    """
+    
+    def process_response(self, request, response):
+        """Add token refresh information to response headers."""
+        if (request.path.startswith('/api/') and 
+            hasattr(request, 'user') and 
+            request.user.is_authenticated and
+            response.status_code == 200):
+            
+            # Check if there's an Authorization header
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Bearer '):
+                token_string = auth_header.split(' ')[1]
+                try:
+                    token = AccessToken(token_string)
+                    
+                    # Check if token expires within the next 30 minutes
+                    import datetime
+                    now = timezone.now()
+                    token_exp = token.get('exp')
+                    token_exp_datetime = datetime.datetime.fromtimestamp(token_exp, tz=timezone.utc)
+                    
+                    # If token expires within 30 minutes, add refresh hint
+                    if (token_exp_datetime - now).total_seconds() < 1800:  # 30 minutes
+                        response['X-Token-Refresh-Suggested'] = 'true'
+                        response['X-Token-Expires-At'] = token_exp_datetime.isoformat()
+                        
+                except (TokenError, InvalidToken, ValueError):
+                    # Token is invalid, don't add headers
+                    pass
         
         return response
 

@@ -6,7 +6,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     UserViewSet, UserProfileViewSet, AuthViewSet, UserSessionViewSet,
-    CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView
+    CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView, TokenStatusView
 )
 
 router = DefaultRouter()
@@ -22,5 +22,6 @@ urlpatterns = [
     # JWT Authentication endpoints
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('token/status/', TokenStatusView.as_view(), name='token_status'),
     path('logout/', LogoutView.as_view(), name='logout'),
 ]

@@ -14,12 +14,12 @@ from django.conf import settings
 import uuid
 import logging
 
-from .models import User, UserProfile, UserSession, PasswordResetToken
+from .models import User, UserProfile, UserSession, PasswordResetCode
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
-    UserProfileSerializer, PasswordChangeSerializer,
+    UserUpdateSerializer, UserProfileSerializer, PasswordChangeSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    UserSessionSerializer, CustomTokenObtainPairSerializer
+    UserSessionSerializer, CustomTokenObtainPairSerializer, TokenRefreshSerializer
 )
 from core.utils import APIResponse
 from core.permissions import IsOwnerOrAdmin
@@ -55,6 +55,8 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         if self.action == 'create':
             return UserRegistrationSerializer
+        elif self.action in ['update', 'partial_update']:
+            return UserUpdateSerializer
         return UserSerializer
     
     def create(self, request, *args, **kwargs):
@@ -93,6 +95,65 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer.save()
             return APIResponse.success(data=serializer.data, message="Profile updated successfully")
         return APIResponse.error(message="Update failed", errors=serializer.errors)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Update user instance.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return APIResponse.success(
+                data=UserSerializer(instance).data,
+                message="User updated successfully"
+            )
+        return APIResponse.error(
+            message="Update failed",
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Partially update user instance.
+        """
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def update_role(self, request, pk=None):
+        """
+        Update user role (admin only).
+        """
+        user = self.get_object()
+        new_role = request.data.get('role')
+        
+        if not new_role:
+            return APIResponse.error(
+                message="Role is required",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate role
+        valid_roles = ['reader', 'reporter', 'editor', 'admin']
+        if new_role not in valid_roles:
+            return APIResponse.error(
+                message=f"Invalid role. Must be one of: {', '.join(valid_roles)}",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update role
+        old_role = user.role
+        user.role = new_role
+        user.save()
+        
+        return APIResponse.success(
+            data=UserSerializer(user).data,
+            message=f"User role updated from {old_role} to {new_role}"
+        )
     
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def change_password(self, request):
@@ -288,58 +349,68 @@ class AuthViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def password_reset_request(self, request):
         """
-        Request password reset.
+        Request password reset code.
         """
         serializer = PasswordResetRequestSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            user = User.objects.get(email=email)
-            
-            # Generate reset token
-            token = str(uuid.uuid4())
-            PasswordResetToken.objects.create(
-                user=user,
-                token=token,
-                expires_at=timezone.now() + timezone.timedelta(hours=24)
-            )
-            
-            # Send reset email
             try:
-                send_mail(
-                    'Password Reset Request',
-                    f'Click the link to reset your password: {settings.FRONTEND_URL}/reset-password/{token}',
-                    settings.DEFAULT_FROM_EMAIL,
-                    [email],
-                    fail_silently=False,
+                user = User.objects.get(email=email)
+                
+                # Generate reset code
+                code = PasswordResetCode.generate_code()
+                
+                # Invalidate any existing codes for this user
+                PasswordResetCode.objects.filter(user=user, is_used=False).update(is_used=True)
+                
+                # Create new reset code
+                reset_code = PasswordResetCode.objects.create(
+                    user=user,
+                    code=code,
+                    expires_at=timezone.now() + timezone.timedelta(minutes=15)  # 15 minutes expiry
                 )
-                return APIResponse.success(message="Password reset email sent")
-            except Exception as e:
-                logger.error(f"Failed to send password reset email: {e}")
-                return APIResponse.error(message="Failed to send reset email")
+                
+                # Send reset email
+                try:
+                    send_mail(
+                        'Password Reset Code - Somali Report',
+                        f'Hello {user.first_name},\n\nYou requested a password reset for your Somali Report account.\n\nYour reset code is: {code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this password reset, please ignore this email.\n\nBest regards,\nSomali Report Team',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [email],
+                        fail_silently=False,
+                    )
+                    logger.info(f"Password reset code sent successfully to {email}")
+                    return APIResponse.success(message="Password reset code sent")
+                except Exception as e:
+                    logger.error(f"Failed to send password reset email to {email}: {e}")
+                    return APIResponse.error(message="Failed to send reset code")
+            except User.DoesNotExist:
+                logger.warning(f"Password reset requested for non-existent email: {email}")
+                # Don't reveal if email exists or not for security
+                return APIResponse.success(message="If the email exists, a password reset code has been sent")
         
         return APIResponse.error(message="Invalid email", errors=serializer.errors)
     
     @action(detail=False, methods=['post'])
     def password_reset_confirm(self, request):
         """
-        Confirm password reset.
+        Confirm password reset using code.
         """
         serializer = PasswordResetConfirmSerializer(data=request.data)
         if serializer.is_valid():
-            token = serializer.validated_data['token']
+            reset_code = serializer.validated_data['reset_code']
             new_password = serializer.validated_data['new_password']
-            
-            reset_token = PasswordResetToken.objects.get(token=token)
-            user = reset_token.user
+            user = reset_code.user
             
             # Update password
             user.set_password(new_password)
             user.save()
             
-            # Mark token as used
-            reset_token.is_used = True
-            reset_token.save()
+            # Mark code as used
+            reset_code.is_used = True
+            reset_code.save()
             
+            logger.info(f"Password reset successful for user {user.email}")
             return APIResponse.success(message="Password reset successful")
         
         return APIResponse.error(message="Password reset failed", errors=serializer.errors)
@@ -384,13 +455,11 @@ class UserSessionViewSet(viewsets.ReadOnlyModelViewSet):
             user=request.user,
             session_key__ne=request.session.session_key
         ).update(is_active=False)
-        
-        return APIResponse.success(message="All other sessions terminated")
 
 
 # JWT Authentication Views
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -445,22 +514,19 @@ class CustomTokenRefreshView(TokenRefreshView):
     """
     Custom JWT token refresh view.
     """
+    serializer_class = TokenRefreshSerializer
     
     @extend_schema(
         summary="Refresh JWT Token",
         description="Get a new access token using a valid refresh token",
-        request={
-            "type": "object",
-            "properties": {
-                "refresh": {"type": "string", "description": "JWT refresh token"}
-            },
-            "required": ["refresh"]
-        },
+        request=TokenRefreshSerializer,
         responses={
             200: {
                 "type": "object",
                 "properties": {
-                    "access": {"type": "string", "description": "New JWT access token"}
+                    "access": {"type": "string", "description": "New JWT access token"},
+                    "refresh": {"type": "string", "description": "New JWT refresh token (if rotating refresh tokens enabled)"},
+                    "message": {"type": "string", "description": "Success message"}
                 }
             },
             400: {"description": "Invalid refresh token"}
@@ -468,7 +534,12 @@ class CustomTokenRefreshView(TokenRefreshView):
         tags=["JWT Authentication"]
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            response.data['message'] = 'Token refreshed successfully'
+        
+        return response
 
 
 class LogoutView(APIView):
@@ -501,3 +572,69 @@ class LogoutView(APIView):
             return APIResponse.success(message="Logout successful")
         except Exception as e:
             return APIResponse.error(message="Logout failed", status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class TokenStatusView(APIView):
+    """
+    View to check JWT token status and get token information.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @extend_schema(
+        summary="Check Token Status",
+        description="Get information about the current JWT token",
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "valid": {"type": "boolean", "description": "Whether the token is valid"},
+                    "expires_at": {"type": "string", "description": "Token expiration timestamp"},
+                    "time_until_expiry": {"type": "integer", "description": "Seconds until token expires"},
+                    "user": {"type": "object", "description": "User information"},
+                    "refresh_suggested": {"type": "boolean", "description": "Whether token refresh is suggested"}
+                }
+            },
+            401: {"description": "Invalid or expired token"}
+        },
+        tags=["JWT Authentication"]
+    )
+    def get(self, request):
+        """Check the status of the current JWT token."""
+        try:
+            # Get token from Authorization header
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if not auth_header.startswith('Bearer '):
+                return APIResponse.error(
+                    message="No valid token provided",
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            token_string = auth_header.split(' ')[1]
+            token = AccessToken(token_string)
+            
+            # Get token expiration info
+            import datetime
+            now = timezone.now()
+            token_exp = token.get('exp')
+            token_exp_datetime = datetime.datetime.fromtimestamp(token_exp, tz=timezone.utc)
+            time_until_expiry = int((token_exp_datetime - now).total_seconds())
+            
+            # Determine if refresh is suggested (within 30 minutes)
+            refresh_suggested = time_until_expiry < 1800
+            
+            return APIResponse.success(
+                data={
+                    'valid': True,
+                    'expires_at': token_exp_datetime.isoformat(),
+                    'time_until_expiry': max(0, time_until_expiry),
+                    'user': UserSerializer(request.user).data,
+                    'refresh_suggested': refresh_suggested
+                },
+                message="Token status retrieved successfully"
+            )
+            
+        except Exception as e:
+            return APIResponse.error(
+                message="Invalid token",
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )

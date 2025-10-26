@@ -4,7 +4,8 @@ Serializers for content app.
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Category, Tag, Article, MediaFile, ArticleView, ArticleLike, ArticleShare
+from django.utils import timezone
+from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare
 from core.utils import StringHelper
 
 User = get_user_model()
@@ -27,7 +28,20 @@ class CategorySerializer(serializers.ModelSerializer):
     
     def get_article_count(self, obj):
         """Get count of published articles in this category."""
-        return obj.article_set.filter(status='published').count()
+        from .models import Article
+        
+        # Count articles where this category is either primary or secondary
+        primary_count = Article.objects.filter(
+            primary_category=obj,
+            status='published'
+        ).count()
+        
+        secondary_count = Article.objects.filter(
+            secondary_categories=obj,
+            status='published'
+        ).count()
+        
+        return primary_count + secondary_count
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -58,15 +72,25 @@ class MediaFileSerializer(serializers.ModelSerializer):
     file_size_mb = serializers.ReadOnlyField()
     is_image = serializers.ReadOnlyField()
     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
+    file_url = serializers.SerializerMethodField()
     
     class Meta:
         model = MediaFile
         fields = [
             'id', 'name', 'file', 'file_type', 'file_size', 'file_size_mb',
             'mime_type', 'alt_text', 'caption', 'uploaded_by', 'uploaded_by_name',
-            'article', 'width', 'height', 'is_image', 'created_at', 'updated_at'
+            'article', 'width', 'height', 'is_image', 'file_url', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'file_size', 'mime_type', 'uploaded_by', 'created_at', 'updated_at']
+    
+    def get_file_url(self, obj):
+        """Get file URL."""
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
 
 
 class ArticleListSerializer(serializers.ModelSerializer):
@@ -75,20 +99,28 @@ class ArticleListSerializer(serializers.ModelSerializer):
     """
     
     author_name = serializers.CharField(source='author.full_name', read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    primary_category_name = serializers.CharField(source='primary_category.name', read_only=True)
+    secondary_category_names = serializers.StringRelatedField(source='secondary_categories', many=True, read_only=True)
     tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
     reading_time = serializers.ReadOnlyField()
     is_published = serializers.ReadOnlyField()
     featured_image_url = serializers.SerializerMethodField()
+    featured_image_display_url = serializers.ReadOnlyField()
+    is_primary_category_active = serializers.ReadOnlyField()
+    is_secondary_categories_active = serializers.ReadOnlyField()
     
     class Meta:
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'status', 'priority',
-            'author', 'author_name', 'category', 'category_name',
-            'tags', 'tag_names', 'featured_image', 'featured_image_url',
+            'author', 'author_name', 'primary_category', 'primary_category_name',
+            'secondary_categories', 'secondary_category_names',
+            'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
             'published_at', 'view_count', 'like_count', 'share_count',
             'is_featured', 'is_breaking', 'reading_time', 'is_published',
+            'primary_category_expires_at', 'primary_category_archived_at',
+            'secondary_categories_expire_at', 'secondary_categories_archived_at',
+            'is_primary_category_active', 'is_secondary_categories_active',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
@@ -109,24 +141,34 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     """
     
     author_name = serializers.CharField(source='author.full_name', read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    primary_category_name = serializers.CharField(source='primary_category.name', read_only=True)
+    secondary_category_names = serializers.StringRelatedField(source='secondary_categories', many=True, read_only=True)
     tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
     reading_time = serializers.ReadOnlyField()
     is_published = serializers.ReadOnlyField()
     featured_image_url = serializers.SerializerMethodField()
+    featured_image_display_url = serializers.ReadOnlyField()
     media_files = MediaFileSerializer(many=True, read_only=True)
+    inline_media_files = serializers.SerializerMethodField()
+    inline_media_urls = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    is_primary_category_active = serializers.ReadOnlyField()
+    is_secondary_categories_active = serializers.ReadOnlyField()
     
     class Meta:
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'content', 'status', 'priority',
-            'author', 'author_name', 'category', 'category_name',
-            'tags', 'tag_names', 'featured_image', 'featured_image_url',
+            'author', 'author_name', 'primary_category', 'primary_category_name',
+            'secondary_categories', 'secondary_category_names',
+            'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
             'meta_title', 'meta_description', 'published_at', 'scheduled_at',
             'view_count', 'like_count', 'share_count', 'allow_comments',
             'is_featured', 'is_breaking', 'reading_time', 'is_published',
-            'media_files', 'is_liked', 'created_at', 'updated_at'
+            'primary_category_expires_at', 'primary_category_archived_at',
+            'secondary_categories_expire_at', 'secondary_categories_archived_at',
+            'is_primary_category_active', 'is_secondary_categories_active',
+            'media_files', 'inline_media_files', 'inline_media_urls', 'is_liked', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
     
@@ -138,6 +180,16 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.featured_image.url)
             return obj.featured_image.url
         return None
+    
+    def get_inline_media_files(self, obj):
+        """Get MediaFile objects referenced in the article content."""
+        media_files = obj.get_inline_media_files()
+        serializer = MediaFileSerializer(media_files, many=True, context=self.context)
+        return serializer.data
+    
+    def get_inline_media_urls(self, obj):
+        """Get URLs of media files referenced in the article content."""
+        return obj.extract_media_urls_from_content()
     
     def get_is_liked(self, obj):
         """Check if current user has liked this article."""
@@ -156,8 +208,9 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'title', 'excerpt', 'content', 'status', 'priority',
-            'category', 'tags', 'featured_image', 'meta_title',
-            'meta_description', 'published_at', 'scheduled_at',
+            'primary_category', 'secondary_categories', 'tags', 'featured_image', 'featured_image_url',
+            'meta_title', 'meta_description', 'published_at', 'scheduled_at',
+            'primary_category_expires_at', 'secondary_categories_expire_at',
             'allow_comments', 'is_featured', 'is_breaking'
         ]
     
@@ -178,6 +231,17 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
         if value and value <= timezone.now():
             raise serializers.ValidationError("Scheduled time must be in the future.")
         return value
+    
+    def validate(self, data):
+        """Validate featured image fields."""
+        featured_image = data.get('featured_image')
+        featured_image_url = data.get('featured_image_url')
+        
+        # If both are provided, prefer the file upload
+        if featured_image and featured_image_url:
+            data['featured_image_url'] = None  # Clear URL if file is provided
+        
+        return data
 
 
 class ArticleViewSerializer(serializers.ModelSerializer):
@@ -216,3 +280,125 @@ class ArticleShareSerializer(serializers.ModelSerializer):
             'id', 'article', 'user', 'platform', 'ip_address', 'created_at'
         ]
         read_only_fields = ['id', 'user', 'ip_address', 'created_at']
+
+
+class VideoListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for Video list view - optimized for efficient retrieval.
+    """
+    
+    uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+    video_url = serializers.SerializerMethodField()
+    file_size_mb = serializers.ReadOnlyField()
+    is_published = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Video
+        fields = [
+            'id', 'title', 'slug', 'description', 'status', 'uploaded_by', 'uploaded_by_name',
+            'category', 'category_name', 'tags', 'tag_names', 'thumbnail', 'thumbnail_url',
+            'duration', 'view_count', 'like_count', 'share_count', 'is_featured',
+            'published_at', 'video_url', 'file_size_mb', 'is_published', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
+    
+    def get_thumbnail_url(self, obj):
+        """Get thumbnail URL."""
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+    
+    def get_video_url(self, obj):
+        """Get video URL."""
+        if obj.video_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.video_file.url)
+            return obj.video_file.url
+        return None
+
+
+class VideoDetailSerializer(serializers.ModelSerializer):
+    """
+    Detailed serializer for Video detail view.
+    """
+    
+    uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+    video_url = serializers.SerializerMethodField()
+    file_size_mb = serializers.ReadOnlyField()
+    is_published = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Video
+        fields = [
+            'id', 'title', 'slug', 'description', 'status', 'uploaded_by', 'uploaded_by_name',
+            'category', 'category_name', 'tags', 'tag_names', 'thumbnail', 'thumbnail_url',
+            'duration', 'view_count', 'like_count', 'share_count', 'is_featured',
+            'allow_comments', 'published_at', 'video_url', 'file_size_mb', 'mime_type',
+            'is_published', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
+    
+    def get_thumbnail_url(self, obj):
+        """Get thumbnail URL."""
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+    
+    def get_video_url(self, obj):
+        """Get video URL."""
+        if obj.video_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.video_file.url)
+            return obj.video_file.url
+        return None
+
+
+class VideoCreateUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Video create/update operations.
+    """
+    
+    class Meta:
+        model = Video
+        fields = [
+            'title', 'description', 'video_file', 'thumbnail', 'status',
+            'category', 'tags', 'duration', 'allow_comments', 'is_featured',
+            'published_at'
+        ]
+    
+    def validate_title(self, value):
+        """Validate video title."""
+        if len(value) < 5:
+            raise serializers.ValidationError("Title must be at least 5 characters long.")
+        return value
+    
+    def validate_video_file(self, value):
+        """Validate video file."""
+        if value:
+            # Check file extension
+            allowed_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi']
+            if not any(value.name.lower().endswith(ext) for ext in allowed_extensions):
+                raise serializers.ValidationError(
+                    "Video file must be one of: mp4, webm, ogg, mov, avi"
+                )
+            # Check file size (max 500MB)
+            max_size = 500 * 1024 * 1024  # 500MB
+            if value.size > max_size:
+                raise serializers.ValidationError(
+                    f"Video file too large. Maximum size is {max_size // (1024*1024)}MB"
+                )
+        return value

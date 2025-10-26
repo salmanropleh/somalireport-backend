@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User, UserProfile, UserSession, PasswordResetToken
+from .models import User, UserProfile, UserSession, PasswordResetCode
 from core.utils import ValidationHelper
 
 
@@ -150,6 +150,50 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'date_joined', 'last_login']
 
 
+class UserUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating user data including role-based fields.
+    """
+    
+    full_name = serializers.ReadOnlyField()
+    is_reporter = serializers.ReadOnlyField()
+    is_editor = serializers.ReadOnlyField()
+    is_admin = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'full_name', 'role', 'bio', 'avatar', 'phone', 
+            'is_verified', 'is_active', 'date_joined', 'last_login',
+            'is_reporter', 'is_editor', 'is_admin'
+        ]
+        read_only_fields = ['id', 'date_joined', 'last_login', 'email', 'username']
+    
+    def validate_role(self, value):
+        """Validate role changes."""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            # Only admins can change roles
+            if not (request.user.is_admin or request.user.is_staff):
+                raise serializers.ValidationError("Only admins can change user roles.")
+        return value
+    
+    def update(self, instance, validated_data):
+        """Update user instance."""
+        # Update the role field which will automatically update the is_* properties
+        if 'role' in validated_data:
+            instance.role = validated_data['role']
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            if attr != 'role':
+                setattr(instance, attr, value)
+        
+        instance.save()
+        return instance
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """
     Serializer for user profile data.
@@ -206,28 +250,49 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """
-    Serializer for password reset confirmation.
+    Serializer for password reset confirmation using code.
     """
     
-    token = serializers.CharField()
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=6, min_length=6)
     new_password = serializers.CharField(validators=[validate_password])
     new_password_confirm = serializers.CharField()
     
-    def validate_token(self, value):
-        """Validate reset token."""
-        try:
-            reset_token = PasswordResetToken.objects.get(token=value)
-            if not reset_token.is_valid():
-                raise serializers.ValidationError("Invalid or expired token.")
-            return value
-        except PasswordResetToken.DoesNotExist:
-            raise serializers.ValidationError("Invalid token.")
+    def validate_code(self, value):
+        """Validate reset code format."""
+        if not value.isdigit() or len(value) != 6:
+            raise serializers.ValidationError("Code must be a 6-digit number.")
+        return value
     
     def validate(self, attrs):
-        """Validate new password confirmation."""
+        """Validate reset code and password confirmation."""
+        email = attrs.get('email')
+        code = attrs.get('code')
+        
         if attrs['new_password'] != attrs['new_password_confirm']:
             raise serializers.ValidationError("New passwords don't match.")
-        return attrs
+        
+        try:
+            reset_code = PasswordResetCode.objects.get(
+                user__email=email,
+                code=code
+            )
+            
+            if not reset_code.is_valid():
+                if reset_code.is_expired():
+                    raise serializers.ValidationError("Reset code has expired.")
+                elif reset_code.is_used:
+                    raise serializers.ValidationError("Reset code has already been used.")
+                elif reset_code.attempts >= reset_code.max_attempts:
+                    raise serializers.ValidationError("Too many failed attempts. Please request a new code.")
+                else:
+                    raise serializers.ValidationError("Invalid reset code.")
+            
+            attrs['reset_code'] = reset_code
+            return attrs
+            
+        except PasswordResetCode.DoesNotExist:
+            raise serializers.ValidationError("Invalid email or reset code.")
 
 
 class UserSessionSerializer(serializers.ModelSerializer):
@@ -275,3 +340,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         
         return data
+
+
+class TokenRefreshSerializer(serializers.Serializer):
+    """
+    Serializer for JWT token refresh.
+    """
+    
+    refresh = serializers.CharField(
+        help_text="JWT refresh token",
+        label="Refresh Token"
+    )
