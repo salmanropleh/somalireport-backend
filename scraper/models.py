@@ -43,6 +43,12 @@ class NewsSource(BaseModel):
     image_selector = models.CharField(max_length=200, blank=True, null=True)
     date_selector = models.CharField(max_length=200, blank=True, null=True)
     
+    # Content association
+    icon_url = models.URLField(blank=True, null=True, help_text="Icon/logo URL for the source")
+    icon = models.ImageField(upload_to='sources/icons/', blank=True, null=True, help_text="Source icon/logo")
+    category = models.ForeignKey('content.Category', on_delete=models.SET_NULL, null=True, blank=True, related_name='news_sources', help_text="Default category for scraped content")
+    tags = models.ManyToManyField('content.Tag', blank=True, related_name='news_sources', help_text="Default tags for scraped content")
+    
     # Statistics
     total_scraped = models.PositiveIntegerField(default=0)
     successful_scrapes = models.PositiveIntegerField(default=0)
@@ -116,6 +122,10 @@ class ScrapedArticle(BaseModel):
     # Quality metrics
     quality_score = models.FloatField(default=0.0)
     language = models.CharField(max_length=10, default='en')
+    
+    # Content association (from source)
+    category = models.ForeignKey('content.Category', on_delete=models.SET_NULL, null=True, blank=True, related_name='scraped_articles', help_text="Category inherited from source")
+    tags = models.ManyToManyField('content.Tag', blank=True, related_name='scraped_articles', help_text="Tags inherited from source")
     
     class Meta:
         db_table = 'scraped_articles'

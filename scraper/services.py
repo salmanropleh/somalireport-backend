@@ -71,6 +71,8 @@ class NewsScrapingService:
             articles_found = 0
             articles_scraped = 0
             articles_processed = 0
+            duplicates = 0
+            errors = 0
             
             for item in root.findall('.//item')[:max_articles]:
                 articles_found += 1
@@ -101,7 +103,13 @@ class NewsScrapingService:
                         articles_scraped += 1
                         if article.status == 'approved':
                             articles_processed += 1
+                    else:
+                        duplicates += 1
+                else:
+                    errors += 1
+                    self.log('warning', f"Skipped article due to missing title or link")
             
+            self.log('info', f"RSS scraping summary: {articles_found} found, {articles_scraped} scraped, {duplicates} duplicates, {errors} errors")
             return articles_found, articles_scraped, articles_processed
             
         except Exception as e:
@@ -224,7 +232,7 @@ class NewsScrapingService:
                 self.log('info', f"Duplicate article found: {title}")
                 return None
             
-            # Create scraped article
+            # Create scraped article with category and tags from source
             article = ScrapedArticle.objects.create(
                 source=self.source,
                 source_url=source_url,
@@ -234,8 +242,13 @@ class NewsScrapingService:
                 published_at=published_at,
                 content_hash=content_hash,
                 title_hash=title_hash,
-                quality_score=self._calculate_quality_score(title, content)
+                quality_score=self._calculate_quality_score(title, content),
+                category=self.source.category  # Inherit category from source
             )
+            
+            # Add tags from source
+            if self.source.tags.exists():
+                article.tags.set(self.source.tags.all())
             
             self.log('info', f"Created scraped article: {title}")
             return article

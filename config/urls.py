@@ -31,8 +31,8 @@ urlpatterns = [
     # Comments API
     path('api/v1/', include('comments.urls')),
     
-    # Scraper API (if needed)
-    # path('api/v1/', include('scraper.urls')),
+    # Scraper API
+    path('api/v1/scraper/', include('scraper.urls')),
 ]
 
 # Debug toolbar URLs (disabled for now)
