@@ -18,6 +18,8 @@ from .serializers import (
 )
 from core.utils import APIResponse
 from core.permissions import IsEditorOrReadOnly, IsOwnerOrReadOnly
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions as drf_permissions
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -28,7 +30,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'is_approved', 'user', 'parent']
+    filterset_fields = ['status', 'is_approved', 'user', 'parent', 'content_type', 'object_id']
     search_fields = ['content', 'author_name', 'author_email']
     ordering_fields = ['created_at', 'like_count', 'dislike_count']
     ordering = ['-created_at']
@@ -65,6 +67,24 @@ class CommentViewSet(viewsets.ModelViewSet):
             user=self.request.user,
             ip_address=self.request.META.get('REMOTE_ADDR'),
             user_agent=self.request.META.get('HTTP_USER_AGENT', '')
+        )
+    
+    def create(self, request, *args, **kwargs):
+        """Create comment and return with proper serializer."""
+        response = super().create(request, *args, **kwargs)
+        
+        # After creating, serialize the response with CommentSerializer
+        # to avoid serializing content_type and object_id
+        from .serializers import CommentSerializer
+        comment_serializer = CommentSerializer(
+            self.get_queryset().get(pk=response.data['id']),
+            context={'request': request}
+        )
+        
+        from core.utils import APIResponse
+        return APIResponse.success(
+            data=comment_serializer.data,
+            message="Comment created successfully"
         )
     
     @action(detail=True, methods=['post'])
@@ -207,6 +227,78 @@ class CommentViewSet(viewsets.ModelViewSet):
         
         serializer = CommentStatsSerializer(stats)
         return APIResponse.success(data=serializer.data, message="Comment statistics retrieved")
+    
+    @action(detail=False, methods=['get'])
+    def count(self, request):
+        """Get comment count for a specific content object (article or video)."""
+        content_type_id = request.query_params.get('content_type')
+        object_id = request.query_params.get('object_id')
+        
+        if not content_type_id or not object_id:
+            return APIResponse.error(
+                message="content_type and object_id parameters are required",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            content_type = ContentType.objects.get(pk=content_type_id)
+            object_id = int(object_id)
+        except (ValueError, ContentType.DoesNotExist):
+            return APIResponse.error(
+                message="Invalid content_type or object_id",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get counts based on user permissions
+        is_authenticated = request.user.is_authenticated
+        is_editor = request.user.is_authenticated and (
+            request.user.role in ['editor', 'admin'] or request.user.is_staff
+        )
+        
+        # Build the base query
+        queryset = Comment.objects.filter(
+            content_type=content_type,
+            object_id=object_id
+        )
+        
+        # Count approved comments (always shown)
+        approved_count = queryset.filter(is_approved=True).count()
+        
+        # Count pending/rejected for authenticated users
+        if is_authenticated:
+            # For regular users: also count their own pending comments
+            if not is_editor:
+                user_pending = queryset.filter(
+                    user=request.user,
+                    status='pending',
+                    is_approved=False
+                ).count()
+                total_count = approved_count + user_pending
+                counts = {
+                    'total': total_count,
+                    'approved': approved_count,
+                    'pending_user': user_pending
+                }
+            else:
+                # Editors see all counts
+                counts = {
+                    'total': queryset.count(),
+                    'approved': approved_count,
+                    'pending': queryset.filter(status='pending').count(),
+                    'rejected': queryset.filter(status='rejected').count(),
+                    'spam': queryset.filter(status='spam').count()
+                }
+        else:
+            # Unauthenticated users only see approved
+            counts = {
+                'total': approved_count,
+                'approved': approved_count
+            }
+        
+        return APIResponse.success(
+            data=counts,
+            message="Comment count retrieved successfully"
+        )
 
 
 class CommentReportViewSet(viewsets.ReadOnlyModelViewSet):
@@ -258,3 +350,25 @@ class CommentSubscriptionViewSet(viewsets.ModelViewSet):
         subscriptions = self.get_queryset()
         serializer = self.get_serializer(subscriptions, many=True, context={'request': request})
         return APIResponse.success(data=serializer.data, message="Subscriptions retrieved")
+
+
+@api_view(['GET'])
+@permission_classes([drf_permissions.AllowAny])
+def get_content_types(request):
+    """
+    Get available content types for commenting.
+    Public endpoint to help frontend determine content_type IDs.
+    """
+    content_types = ContentType.objects.filter(
+        model__in=['article', 'video']  # Add other models that support comments
+    ).values('id', 'app_label', 'model')
+    
+    # Format: {model_name: content_type_id}
+    data = {
+        ct['model']: ct['id'] for ct in content_types
+    }
+    
+    return APIResponse.success(
+        data=data, 
+        message="Content types retrieved"
+    )

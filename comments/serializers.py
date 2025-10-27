@@ -23,15 +23,17 @@ class CommentSerializer(serializers.ModelSerializer):
     is_reply = serializers.ReadOnlyField()
     replies = serializers.SerializerMethodField()
     
+    # Explicitly hide internal fields
+    content_type = serializers.HiddenField(default=None)
+    object_id = serializers.HiddenField(default=None)
+    ip_address = serializers.HiddenField(default=None)
+    user_agent = serializers.HiddenField(default=None)
+    moderated_by = serializers.HiddenField(default=None)
+    moderated_at = serializers.HiddenField(default=None)
+    
     class Meta:
         model = Comment
-        fields = [
-            'id', 'content', 'parent', 'user', 'user_name', 'user_avatar',
-            'author_name', 'author_email', 'author_website', 'status',
-            'is_approved', 'like_count', 'dislike_count', 'reply_count',
-            'is_liked', 'is_disliked', 'depth', 'is_reply', 'replies',
-            'created_at', 'updated_at'
-        ]
+        fields = '__all__'
         read_only_fields = [
             'id', 'user', 'status', 'is_approved', 'like_count',
             'dislike_count', 'reply_count', 'created_at', 'updated_at'
@@ -55,6 +57,19 @@ class CommentSerializer(serializers.ModelSerializer):
         """Get replies to this comment."""
         replies = obj.replies.filter(is_approved=True).order_by('created_at')
         return CommentSerializer(replies, many=True, context=self.context).data
+    
+    def to_representation(self, instance):
+        """Custom representation to exclude internal fields."""
+        # Get the standard representation
+        ret = super().to_representation(instance)
+        # Remove internal fields we don't want to expose
+        ret.pop('content_type', None)
+        ret.pop('object_id', None)
+        ret.pop('ip_address', None)
+        ret.pop('user_agent', None)
+        ret.pop('moderated_by', None)
+        ret.pop('moderated_at', None)
+        return ret
 
 
 class CommentCreateSerializer(serializers.ModelSerializer):
@@ -62,10 +77,14 @@ class CommentCreateSerializer(serializers.ModelSerializer):
     Serializer for creating comments.
     """
     
+    content_type = serializers.IntegerField(help_text="ContentType ID for the content being commented on")
+    object_id = serializers.IntegerField(help_text="ID of the content object")
+    
     class Meta:
         model = Comment
         fields = [
-            'content', 'parent', 'author_name', 'author_email', 'author_website'
+            'content_type', 'object_id', 'content', 'parent', 
+            'author_name', 'author_email', 'author_website'
         ]
     
     def validate_content(self, value):
@@ -81,6 +100,52 @@ class CommentCreateSerializer(serializers.ModelSerializer):
         if value and value.depth >= 3:
             raise serializers.ValidationError("Maximum comment depth is 3 levels.")
         return value
+    
+    def validate_content_type(self, value):
+        """Validate that content_type exists."""
+        try:
+            ContentType.objects.get(pk=value)
+            return value  # Return the ID
+        except ContentType.DoesNotExist:
+            raise serializers.ValidationError("Invalid content_type ID.")
+    
+    def validate(self, attrs):
+        """Validate that the object exists."""
+        content_type_id = attrs.get('content_type')
+        object_id = attrs.get('object_id')
+        
+        if content_type_id and object_id:
+            try:
+                content_type = ContentType.objects.get(pk=content_type_id)
+                content_object = content_type.get_object_for_this_type(pk=object_id)
+                if not content_object:
+                    raise serializers.ValidationError({
+                        'object_id': 'Content object not found.'
+                    })
+            except Exception as e:
+                raise serializers.ValidationError({
+                    'object_id': 'Invalid content object.'
+                })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Create comment with content_type."""
+        content_type_id = validated_data.pop('content_type')
+        object_id = validated_data.pop('object_id')
+        
+        validated_data['content_type_id'] = content_type_id
+        validated_data['object_id'] = object_id
+        
+        instance = super().create(validated_data)
+        
+        # Use CommentSerializer for the response to avoid content_type serialization issues
+        return instance
+    
+    def to_representation(self, instance):
+        """Use CommentSerializer for output to avoid internal field issues."""
+        from .serializers import CommentSerializer
+        return CommentSerializer(instance, context=self.context).to_representation(instance)
 
 
 class CommentModerationSerializer(serializers.ModelSerializer):
