@@ -760,6 +760,137 @@ class ArticleViewSet(viewsets.ModelViewSet):
         )[:10]
         serializer = self.get_serializer(articles, many=True, context={'request': request})
         return APIResponse.success(data=serializer.data, message="Trending articles retrieved")
+    
+    @action(detail=True, methods=['get'])
+    @extend_schema(
+        summary="Get Related Articles",
+        description="Get articles related to the current article based on shared categories and tags",
+        parameters=[
+            {
+                'name': 'limit',
+                'in': 'query',
+                'description': 'Maximum number of related articles to return (default: 10)',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 10}
+            }
+        ],
+        responses={
+            200: {"description": "Related articles retrieved successfully"},
+            404: {"description": "Article not found"}
+        },
+        tags=["Articles"]
+    )
+    def related(self, request, pk=None):
+        """Get related articles based on shared categories and tags."""
+        article = self.get_object()
+        
+        # Get limit from query params (default to 10)
+        limit = int(request.GET.get('limit', 10))
+        
+        # Build query for related articles
+        # Articles are related if they share:
+        # 1. Same primary category
+        # 2. Same secondary categories
+        # 3. Same tags
+        
+        related_articles_query = Q()
+        
+        # Add primary category match
+        if article.primary_category:
+            related_articles_query |= Q(primary_category=article.primary_category)
+        
+        # Add secondary category matches
+        if article.secondary_categories.exists():
+            related_articles_query |= Q(secondary_categories__in=article.secondary_categories.all())
+        
+        # Add tag matches
+        if article.tags.exists():
+            related_articles_query |= Q(tags__in=article.tags.all())
+        
+        # If no categories or tags, return empty result
+        if not related_articles_query:
+            return APIResponse.success(
+                data={'articles': [], 'count': 0},
+                message="No related articles found (article has no categories or tags)"
+            )
+        
+        # Get related articles
+        # Exclude the current article, only published articles
+        related_articles = Article.objects.filter(
+            related_articles_query,
+            status='published'
+        ).exclude(
+            id=article.id
+        ).select_related(
+            'author', 'primary_category'
+        ).prefetch_related(
+            'tags', 'secondary_categories'
+        ).distinct()
+        
+        # Calculate relevance score for each article
+        # Score based on:
+        # - Primary category match: 3 points
+        # - Secondary category match: 2 points per category
+        # - Tag match: 1 point per tag
+        # Then order by score (descending) and recency
+        
+        article_scores = []
+        for related_article in related_articles:
+            score = 0
+            
+            # Primary category match
+            if article.primary_category and related_article.primary_category == article.primary_category:
+                score += 3
+            
+            # Secondary category matches
+            shared_secondary = article.secondary_categories.filter(
+                id__in=related_article.secondary_categories.values_list('id', flat=True)
+            ).count()
+            score += shared_secondary * 2
+            
+            # Tag matches
+            shared_tags = article.tags.filter(
+                id__in=related_article.tags.values_list('id', flat=True)
+            ).count()
+            score += shared_tags
+            
+            article_scores.append((related_article, score))
+        
+        # Sort by score (descending), then by published_at (descending)
+        # Higher scores first, then most recent articles first
+        # Use a large number for dates to ensure descending order
+        def get_sort_key(item):
+            article, score = item
+            # Use a large timestamp value minus the actual timestamp for descending order
+            date_value = article.published_at if article.published_at else article.created_at
+            if date_value:
+                # Convert to sortable value (larger timestamp = more recent)
+                # We'll use negative of a large number minus timestamp for descending
+                date_sort = -int(date_value.timestamp())
+            else:
+                date_sort = 0  # Articles without dates go last
+            return (-score, date_sort)  # Negative score for descending
+        
+        article_scores.sort(key=get_sort_key)
+        
+        # Extract articles and limit
+        related_articles = [art for art, score in article_scores[:limit]]
+        
+        # Serialize the results
+        serializer = ArticleListSerializer(related_articles, many=True, context={'request': request})
+        
+        return APIResponse.success(
+            data={
+                'articles': serializer.data,
+                'count': len(serializer.data),
+                'current_article': {
+                    'id': article.id,
+                    'title': article.title,
+                    'slug': article.slug
+                }
+            },
+            message=f"Retrieved {len(serializer.data)} related article(s)"
+        )
 
 
 class MediaFileViewSet(viewsets.ModelViewSet):
@@ -817,10 +948,29 @@ class MediaFileViewSet(viewsets.ModelViewSet):
         file_extension = os.path.splitext(file.name)[1]
         filename = f"{timezone.now().strftime('%Y%m%d_%H%M%S')}_{file.name}"
         
-        # Create media file record
-        media_file = MediaFile.objects.create(
+        # Ensure uploads directory exists and is writable
+        from django.conf import settings
+        uploads_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
+        os.makedirs(uploads_dir, mode=0o775, exist_ok=True)
+        
+        # Reset file pointer to beginning (in case it was read)
+        if hasattr(file, 'seek'):
+            file.seek(0)
+        
+        # IMPORTANT: Read file content into memory to avoid file handle issues
+        # Django's FileField consumes the file object, so we need to preserve it
+        file_content = file.read()
+        file.seek(0)  # Reset for Django to read it
+        
+        # Save file explicitly using ContentFile to ensure it's actually written
+        # This avoids issues with Django's FileField not saving correctly
+        from django.core.files.base import ContentFile
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Create media file record WITHOUT the file first
+        media_file = MediaFile(
             name=file.name,
-            file=file,
             file_type=file_type,
             file_size=file.size,
             mime_type=mime_type,
@@ -830,14 +980,60 @@ class MediaFileViewSet(viewsets.ModelViewSet):
             article_id=request.data.get('article_id') if request.data.get('article_id') else None
         )
         
+        # Save the model first (without file) to get ID
+        media_file.save()
+        
+        # Now save the file explicitly using ContentFile with preserved content
+        # Use just the original filename - Django will add the suffix and use upload_to
+        original_filename = file.name
+        
+        try:
+            # Create ContentFile from preserved content
+            content_file = ContentFile(file_content, name=original_filename)
+            
+            # Save the file - Django will handle the upload_to path and unique suffix
+            media_file.file.save(original_filename, content_file, save=True)
+            
+            # Get the actual file path after Django saves it
+            file_path = os.path.join(settings.MEDIA_ROOT, media_file.file.name)
+            
+            # Refresh from DB to get the actual filename Django generated
+            media_file.refresh_from_db()
+            file_path = os.path.join(settings.MEDIA_ROOT, media_file.file.name)
+            
+            # Verify it was saved
+            if os.path.exists(file_path):
+                logger.info(f"File saved successfully: {file_path}")
+            else:
+                # Check permissions and directory
+                logger.error(
+                    f"File save failed. Path: {file_path}\n"
+                    f"MEDIA_ROOT: {settings.MEDIA_ROOT}\n"
+                    f"MEDIA_ROOT exists: {os.path.exists(settings.MEDIA_ROOT)}\n"
+                    f"MEDIA_ROOT writable: {os.access(settings.MEDIA_ROOT, os.W_OK)}\n"
+                    f"uploads/ exists: {os.path.exists(uploads_dir)}\n"
+                    f"uploads/ writable: {os.access(uploads_dir, os.W_OK)}\n"
+                    f"File size: {len(file_content)} bytes\n"
+                    f"Generated filename: {media_file.file.name}"
+                )
+                raise Exception(f"File could not be saved to {file_path}. Check permissions.")
+        except Exception as e:
+            logger.error(f"Failed to save file: {e}", exc_info=True)
+            # Clean up the record if file save failed
+            media_file.delete()
+            raise
+        
         # Get image dimensions if it's an image
-        if file_type == 'image':
+        if file_type == 'image' and os.path.exists(file_path):
             try:
-                with Image.open(file) as img:
+                with Image.open(file_path) as img:  # Open from saved file path, not file object
                     media_file.width, media_file.height = img.size
                     media_file.save(update_fields=['width', 'height'])
             except Exception as e:
                 # If we can't get dimensions, continue without them
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Could not get image dimensions: {e}")
                 pass
         
         # Build the URL

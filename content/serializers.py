@@ -98,7 +98,9 @@ class ArticleListSerializer(serializers.ModelSerializer):
     Serializer for Article list view.
     """
     
-    author_name = serializers.CharField(source='author.full_name', read_only=True)
+    author_name = serializers.SerializerMethodField()
+    display_author_name = serializers.SerializerMethodField()
+    display_author_affiliation = serializers.SerializerMethodField()
     primary_category_name = serializers.CharField(source='primary_category.name', read_only=True)
     secondary_category_names = serializers.StringRelatedField(source='secondary_categories', many=True, read_only=True)
     tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
@@ -113,7 +115,8 @@ class ArticleListSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'status', 'priority',
-            'author', 'author_name', 'primary_category', 'primary_category_name',
+            'author', 'author_name', 'display_author_name', 'display_author_affiliation',
+            'primary_category', 'primary_category_name',
             'secondary_categories', 'secondary_category_names',
             'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
             'published_at', 'view_count', 'like_count', 'share_count',
@@ -121,9 +124,27 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
+            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'show_manual_author', 'show_opinion_note',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
+    
+    def get_author_name(self, obj):
+        """Get the automatic author name (original author)."""
+        return obj.author.full_name if obj.author else None
+    
+    def get_display_author_name(self, obj):
+        """Get the author name to display based on toggle."""
+        if obj.show_manual_author and obj.manual_author_name:
+            return obj.manual_author_name
+        return obj.author.full_name if obj.author else None
+    
+    def get_display_author_affiliation(self, obj):
+        """Get the author affiliation to display."""
+        if obj.show_manual_author and obj.manual_author_affiliation:
+            return obj.manual_author_affiliation
+        return None
     
     def get_featured_image_url(self, obj):
         """Get featured image URL."""
@@ -140,7 +161,9 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     Serializer for Article detail view.
     """
     
-    author_name = serializers.CharField(source='author.full_name', read_only=True)
+    author_name = serializers.SerializerMethodField()
+    display_author_name = serializers.SerializerMethodField()
+    display_author_affiliation = serializers.SerializerMethodField()
     primary_category_name = serializers.CharField(source='primary_category.name', read_only=True)
     secondary_category_names = serializers.StringRelatedField(source='secondary_categories', many=True, read_only=True)
     tag_names = serializers.StringRelatedField(source='tags', many=True, read_only=True)
@@ -159,7 +182,8 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'content', 'status', 'priority',
-            'author', 'author_name', 'primary_category', 'primary_category_name',
+            'author', 'author_name', 'display_author_name', 'display_author_affiliation',
+            'primary_category', 'primary_category_name',
             'secondary_categories', 'secondary_category_names',
             'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
             'meta_title', 'meta_description', 'published_at', 'scheduled_at',
@@ -168,9 +192,27 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
+            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'show_manual_author', 'show_opinion_note',
             'media_files', 'inline_media_files', 'inline_media_urls', 'is_liked', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
+    
+    def get_author_name(self, obj):
+        """Get the automatic author name (original author)."""
+        return obj.author.full_name if obj.author else None
+    
+    def get_display_author_name(self, obj):
+        """Get the author name to display based on toggle."""
+        if obj.show_manual_author and obj.manual_author_name:
+            return obj.manual_author_name
+        return obj.author.full_name if obj.author else None
+    
+    def get_display_author_affiliation(self, obj):
+        """Get the author affiliation to display."""
+        if obj.show_manual_author and obj.manual_author_affiliation:
+            return obj.manual_author_affiliation
+        return None
     
     def get_featured_image_url(self, obj):
         """Get featured image URL."""
@@ -211,7 +253,9 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
             'primary_category', 'secondary_categories', 'tags', 'featured_image', 'featured_image_url',
             'meta_title', 'meta_description', 'published_at', 'scheduled_at',
             'primary_category_expires_at', 'secondary_categories_expire_at',
-            'allow_comments', 'is_featured', 'is_breaking'
+            'allow_comments', 'is_featured', 'is_breaking',
+            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'show_manual_author', 'show_opinion_note'
         ]
     
     def validate_title(self, value):
@@ -233,13 +277,22 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
         return value
     
     def validate(self, data):
-        """Validate featured image fields."""
+        """Validate featured image fields and manual author fields."""
         featured_image = data.get('featured_image')
         featured_image_url = data.get('featured_image_url')
         
         # If both are provided, prefer the file upload
         if featured_image and featured_image_url:
             data['featured_image_url'] = None  # Clear URL if file is provided
+        
+        # Validate manual author fields
+        show_manual_author = data.get('show_manual_author', False)
+        manual_author_name = data.get('manual_author_name')
+        
+        if show_manual_author and not manual_author_name:
+            raise serializers.ValidationError({
+                'manual_author_name': 'Manual author name is required when "show_manual_author" is enabled.'
+            })
         
         return data
 

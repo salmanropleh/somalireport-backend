@@ -89,8 +89,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Get database configuration from environment
+db_config = env.db()
+
+# Ensure SQLite database path is absolute to avoid issues with different working directories
+if db_config.get('ENGINE') == 'django.db.backends.sqlite3' and 'NAME' in db_config:
+    db_name = db_config['NAME']
+    # If path is relative, make it absolute relative to BASE_DIR
+    if not os.path.isabs(db_name):
+        db_config['NAME'] = str(BASE_DIR / db_name)
+
 DATABASES = {
-    'default': env.db()
+    'default': db_config
 }
 
 # Password validation

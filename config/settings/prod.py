@@ -7,26 +7,48 @@ from .base import *
 # Override base settings for production
 DEBUG = False
 
-# Production security settings
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+# ALLOWED_HOSTS - add your PythonAnywhere domain and any custom domains
+# Ensure PythonAnywhere domain is always included
+default_hosts = ['johnhenry411.pythonanywhere.com', 'localhost', '127.0.0.1']
+env_allowed_hosts = env.list('ALLOWED_HOSTS', default=[])
+# Merge environment hosts with defaults, ensuring no duplicates
+ALLOWED_HOSTS = list(set(env_allowed_hosts + default_hosts))
 
-# Production database (PostgreSQL)
-DATABASES = {
-    'default': env.db()
-}
+# Production security settings
+# Note: SSL settings may be managed by the hosting provider (e.g., PythonAnywhere)
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)  # Let hosting provider handle SSL
+SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=True)
+CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=True)
+SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True)
+SECURE_HSTS_PRELOAD = env.bool('SECURE_HSTS_PRELOAD', default=True)
+
+# Production database
+# Note: Base settings already handle SQLite absolute path conversion
+# Only override if you need PostgreSQL or other database
+# DATABASES is already configured in base.py with absolute path handling
+# If using PostgreSQL, uncomment and configure:
+# DATABASES = {
+#     'default': env.db()
+# }
+# For SQLite, the base.py configuration is sufficient
 
 # Production email backend
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
 # Production logging
-LOGGING['handlers']['file']['filename'] = '/var/log/django/somali_report.log'
+# Use project logs directory (accessible on PythonAnywhere)
+log_dir = BASE_DIR / 'logs'
+log_dir.mkdir(exist_ok=True)  # Create logs directory if it doesn't exist
+LOGGING['handlers']['file']['filename'] = str(log_dir / 'django.log')
 LOGGING['handlers']['file']['level'] = 'WARNING'
 LOGGING['loggers']['django']['level'] = 'WARNING'
+# Suppress drf-spectacular schema generation warnings (non-critical)
+LOGGING['loggers']['drf_spectacular'] = {
+    'handlers': ['console', 'file'],
+    'level': 'ERROR',  # Only show errors, suppress warnings
+    'propagate': False,
+}
 
 # Production CORS settings
 CORS_ALLOW_ALL_ORIGINS = False
@@ -44,8 +66,11 @@ CACHES = {
 }
 
 # Production static files
-STATIC_ROOT = '/var/www/somali_report/static/'
-MEDIA_ROOT = '/var/www/somali_report/media/'
+# Use environment variables for flexibility, fallback to project directories
+STATIC_ROOT = env('STATIC_ROOT', default=str(BASE_DIR / 'staticfiles'))
+STATIC_URL = env('STATIC_URL', default='/static/')
+MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
+MEDIA_URL = env('MEDIA_URL', default='/media/')
 
 # Production file upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB
