@@ -166,3 +166,15 @@ ARCHITECTURE_GUIDE.md
 FLOW_DIAGRAMS.md
 QUICK_REFERENCE.md
 TECHNICAL_DOCUMENTATION.txt
+
+#settings
+config/settings/dev.py
+config/settings/dev_clean.py
+config/settings/production.py
+config/settings/staging.py
+config/settings/base.py
+config/settings/local.py
+config/settings/test.py
+config/settings/testing.py
+config/settings/development.py
+config/settings/production.py
