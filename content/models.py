@@ -129,6 +129,7 @@ class Article(AuditModel):
     
     # Manual Author Information
     manual_author_name = models.CharField(max_length=200, blank=True, null=True, help_text="Manually entered author name")
+    manual_author_image = models.ImageField(upload_to='authors/', blank=True, null=True, help_text="Manual author profile picture")
     manual_author_affiliation = models.CharField(max_length=200, blank=True, null=True, help_text="Author's affiliation/organization")
     author_opinion_note = models.TextField(blank=True, null=True, help_text="Opinion disclaimer note (e.g., 'This article is the sole opinion of the above author and in no way Somali Report's point of view')")
     show_manual_author = models.BooleanField(default=False, help_text="If True, display manual author info instead of the automatic author")

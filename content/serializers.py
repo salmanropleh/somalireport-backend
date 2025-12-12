@@ -124,7 +124,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
-            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
             'created_at', 'updated_at'
         ]
@@ -192,7 +192,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
-            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
             'media_files', 'inline_media_files', 'inline_media_urls', 'is_liked', 'created_at', 'updated_at'
         ]
@@ -254,7 +254,7 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
             'meta_title', 'meta_description', 'published_at', 'scheduled_at',
             'primary_category_expires_at', 'secondary_categories_expire_at',
             'allow_comments', 'is_featured', 'is_breaking',
-            'manual_author_name', 'manual_author_affiliation', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note'
         ]
     
