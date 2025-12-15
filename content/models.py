@@ -130,6 +130,7 @@ class Article(AuditModel):
     # Manual Author Information
     manual_author_name = models.CharField(max_length=200, blank=True, null=True, help_text="Manually entered author name")
     manual_author_image = models.ImageField(upload_to='authors/', blank=True, null=True, help_text="Manual author profile picture")
+    manual_author_image_url = models.URLField(blank=True, null=True, help_text="URL for manual author profile picture (alternative to file upload)")
     manual_author_affiliation = models.CharField(max_length=200, blank=True, null=True, help_text="Author's affiliation/organization")
     author_opinion_note = models.TextField(blank=True, null=True, help_text="Opinion disclaimer note (e.g., 'This article is the sole opinion of the above author and in no way Somali Report's point of view')")
     show_manual_author = models.BooleanField(default=False, help_text="If True, display manual author info instead of the automatic author")
@@ -172,6 +173,15 @@ class Article(AuditModel):
             return self.featured_image.url
         elif self.featured_image_url:
             return self.featured_image_url
+        return None
+    
+    @property
+    def manual_author_image_display_url(self):
+        """Get manual author image URL from either file field or URL field."""
+        if self.manual_author_image:
+            return self.manual_author_image.url
+        elif self.manual_author_image_url:
+            return self.manual_author_image_url
         return None
     
     @property
@@ -403,7 +413,8 @@ class Video(AuditModel):
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True)
     description = models.TextField(max_length=1000, blank=True, null=True)
-    video_file = models.FileField(upload_to='videos/')
+    video_file = models.FileField(upload_to='videos/', blank=True, null=True)
+    external_video_url = models.URLField(blank=True, null=True, help_text="External video URL (e.g. YouTube)")
     thumbnail = models.ImageField(upload_to='videos/thumbnails/', blank=True, null=True)
     duration = models.PositiveIntegerField(default=0, help_text="Duration in seconds")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
@@ -527,3 +538,24 @@ class ArticleShare(AuditModel):
     
     def __str__(self):
         return f"Share of {self.article.title} on {self.platform}"
+
+
+class Contact(AuditModel):
+    """
+    Contact model for storing contact form submissions.
+    """
+    
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'contacts'
+        verbose_name = 'Contact'
+        verbose_name_plural = 'Contacts'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Message from {self.name}: {self.subject}"

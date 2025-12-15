@@ -17,12 +17,13 @@ import mimetypes
 from PIL import Image
 from drf_spectacular.utils import extend_schema
 
-from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare
+from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare, Contact
 from .serializers import (
     CategorySerializer, TagSerializer, ArticleListSerializer,
     ArticleDetailSerializer, ArticleCreateUpdateSerializer,
     MediaFileSerializer, ArticleViewSerializer, ArticleLikeSerializer,
-    ArticleShareSerializer, VideoListSerializer, VideoDetailSerializer, VideoCreateUpdateSerializer
+    ArticleShareSerializer, VideoListSerializer, VideoDetailSerializer, VideoCreateUpdateSerializer,
+    ContactSerializer
 )
 from core.utils import APIResponse
 from core.permissions import IsEditorOrReadOnly, IsReporterOrReadOnly, IsOwnerOrReadOnly
@@ -433,7 +434,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Return articles based on user permissions."""
-        queryset = Article.objects.select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories')
+        queryset = Article.objects.filter(is_deleted=False).select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories')
         
         # If user is not authenticated or is a reader, only show published articles
         if not self.request.user.is_authenticated or self.request.user.role == 'reader':
@@ -795,9 +796,44 @@ class ArticleViewSet(viewsets.ModelViewSet):
         
         related_articles_query = Q()
         
-        # Add primary category match
         if article.primary_category:
             related_articles_query |= Q(primary_category=article.primary_category)
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Contact submissions.
+    """
+    
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_permissions(self):
+        """
+        Allow any user to create a contact submission.
+        Only admins can list/retrieve submissions.
+        """
+        if self.action == 'create':
+            permission_classes = [permissions.AllowAny]
+        else:
+            permission_classes = [permissions.IsAdminUser]
+        return [permission() for permission in permission_classes]
+    
+    def perform_create(self, serializer):
+        """Save contact submission."""
+        serializer.save()
+        
+    @extend_schema(
+        summary="Submit Contact Form",
+        description="Submit a new contact message.",
+        responses={201: ContactSerializer},
+        tags=["Contact"]
+    )
+    def create(self, request, *args, **kwargs):
+        """Create a new contact submission."""
+        return super().create(request, *args, **kwargs)
+
         
         # Add secondary category matches
         if article.secondary_categories.exists():

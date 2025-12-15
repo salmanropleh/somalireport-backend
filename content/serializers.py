@@ -5,7 +5,7 @@ Serializers for content app.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare
+from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare, Contact
 from core.utils import StringHelper
 
 User = get_user_model()
@@ -110,6 +110,8 @@ class ArticleListSerializer(serializers.ModelSerializer):
     featured_image_display_url = serializers.ReadOnlyField()
     is_primary_category_active = serializers.ReadOnlyField()
     is_secondary_categories_active = serializers.ReadOnlyField()
+    is_secondary_categories_active = serializers.ReadOnlyField()
+    manual_author_image_display_url = serializers.ReadOnlyField()
     
     class Meta:
         model = Article
@@ -124,7 +126,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
-            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'manual_author_image_url', 'manual_author_image_display_url', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
             'created_at', 'updated_at'
         ]
@@ -177,6 +179,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_primary_category_active = serializers.ReadOnlyField()
     is_secondary_categories_active = serializers.ReadOnlyField()
+    manual_author_image_display_url = serializers.ReadOnlyField()
     
     class Meta:
         model = Article
@@ -192,7 +195,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
-            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'manual_author_image_url', 'manual_author_image_display_url', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
             'media_files', 'inline_media_files', 'inline_media_urls', 'is_liked', 'created_at', 'updated_at'
         ]
@@ -254,7 +257,7 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
             'meta_title', 'meta_description', 'published_at', 'scheduled_at',
             'primary_category_expires_at', 'secondary_categories_expire_at',
             'allow_comments', 'is_featured', 'is_breaking',
-            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'author_opinion_note',
+            'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'manual_author_image_url', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note'
         ]
     
@@ -293,6 +296,13 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'manual_author_name': 'Manual author name is required when "show_manual_author" is enabled.'
             })
+            
+        # Prioritize file upload over URL for manual author image
+        manual_author_image = data.get('manual_author_image')
+        manual_author_image_url = data.get('manual_author_image_url')
+        
+        if manual_author_image and manual_author_image_url:
+            data['manual_author_image_url'] = None
         
         return data
 
@@ -354,7 +364,7 @@ class VideoListSerializer(serializers.ModelSerializer):
             'id', 'title', 'slug', 'description', 'status', 'uploaded_by', 'uploaded_by_name',
             'category', 'category_name', 'tags', 'tag_names', 'thumbnail', 'thumbnail_url',
             'duration', 'view_count', 'like_count', 'share_count', 'is_featured',
-            'published_at', 'video_url', 'file_size_mb', 'is_published', 'created_at', 'updated_at'
+            'published_at', 'video_url', 'external_video_url', 'file_size_mb', 'is_published', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
     
@@ -368,12 +378,14 @@ class VideoListSerializer(serializers.ModelSerializer):
         return None
     
     def get_video_url(self, obj):
-        """Get video URL."""
+        """Get video URL (internal or external)."""
         if obj.video_file:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.video_file.url)
             return obj.video_file.url
+        elif obj.external_video_url:
+            return obj.external_video_url
         return None
 
 
@@ -396,7 +408,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             'id', 'title', 'slug', 'description', 'status', 'uploaded_by', 'uploaded_by_name',
             'category', 'category_name', 'tags', 'tag_names', 'thumbnail', 'thumbnail_url',
             'duration', 'view_count', 'like_count', 'share_count', 'is_featured',
-            'allow_comments', 'published_at', 'video_url', 'file_size_mb', 'mime_type',
+            'allow_comments', 'published_at', 'video_url', 'external_video_url', 'file_size_mb', 'mime_type',
             'is_published', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
@@ -411,12 +423,14 @@ class VideoDetailSerializer(serializers.ModelSerializer):
         return None
     
     def get_video_url(self, obj):
-        """Get video URL."""
+        """Get video URL (internal or external)."""
         if obj.video_file:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.video_file.url)
             return obj.video_file.url
+        elif obj.external_video_url:
+            return obj.external_video_url
         return None
 
 
@@ -428,7 +442,7 @@ class VideoCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Video
         fields = [
-            'title', 'description', 'video_file', 'thumbnail', 'status',
+            'title', 'description', 'video_file', 'external_video_url', 'thumbnail', 'status',
             'category', 'tags', 'duration', 'allow_comments', 'is_featured',
             'published_at'
         ]
@@ -455,3 +469,32 @@ class VideoCreateUpdateSerializer(serializers.ModelSerializer):
                     f"Video file too large. Maximum size is {max_size // (1024*1024)}MB"
                 )
         return value
+
+    def validate(self, data):
+        """Validate that either video_file or external_video_url is provided."""
+        video_file = data.get('video_file')
+        external_video_url = data.get('external_video_url')
+        
+        if not video_file and not external_video_url:
+            raise serializers.ValidationError(
+                "Either a video file or an external video URL must be provided."
+            )
+            
+        if video_file and external_video_url:
+            raise serializers.ValidationError(
+                "Please provide either a video file or an external video URL, not both."
+            )
+            
+        return data
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Contact model.
+    """
+    
+    class Meta:
+        model = Contact
+        fields = ['id', 'name', 'email', 'subject', 'message', 'is_read', 'created_at']
+        read_only_fields = ['id', 'is_read', 'created_at']
+
