@@ -110,8 +110,10 @@ class ArticleListSerializer(serializers.ModelSerializer):
     featured_image_display_url = serializers.ReadOnlyField()
     is_primary_category_active = serializers.ReadOnlyField()
     is_secondary_categories_active = serializers.ReadOnlyField()
-    is_secondary_categories_active = serializers.ReadOnlyField()
+    is_primary_archived = serializers.ReadOnlyField()
+    is_secondary_archived = serializers.ReadOnlyField()
     manual_author_image_display_url = serializers.ReadOnlyField()
+    is_saved = serializers.SerializerMethodField()
     
     class Meta:
         model = Article
@@ -126,12 +128,22 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
+            'is_primary_archived', 'is_secondary_archived',
             'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'manual_author_image_url', 'manual_author_image_display_url', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at',
+            'is_saved'
         ]
-        read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'view_count', 'like_count', 'share_count', 'created_at', 'updated_at', 'is_saved']
     
+    def get_is_saved(self, obj):
+        """Check if current user has saved this article."""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and hasattr(obj, 'saves'):
+             from .models import ArticleSave
+             return ArticleSave.objects.filter(article=obj, user=request.user, is_deleted=False).exists()
+        return False
+
     def get_author_name(self, obj):
         """Get the automatic author name (original author)."""
         return obj.author.full_name if obj.author else None
@@ -179,6 +191,8 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_primary_category_active = serializers.ReadOnlyField()
     is_secondary_categories_active = serializers.ReadOnlyField()
+    is_primary_archived = serializers.ReadOnlyField()
+    is_secondary_archived = serializers.ReadOnlyField()
     manual_author_image_display_url = serializers.ReadOnlyField()
     
     class Meta:
@@ -195,6 +209,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
             'primary_category_expires_at', 'primary_category_archived_at',
             'secondary_categories_expire_at', 'secondary_categories_archived_at',
             'is_primary_category_active', 'is_secondary_categories_active',
+            'is_primary_archived', 'is_secondary_archived',
             'manual_author_name', 'manual_author_affiliation', 'manual_author_image', 'manual_author_image_url', 'manual_author_image_display_url', 'author_opinion_note',
             'show_manual_author', 'show_opinion_note',
             'media_files', 'inline_media_files', 'inline_media_urls', 'is_liked', 'created_at', 'updated_at'

@@ -47,7 +47,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         from django.db.models import Count, Q
         
         return Category.objects.filter(
-            is_active=True,
             is_deleted=False
         ).annotate(
             article_count=Count('primary_articles', filter=Q(primary_articles__status='published')) + 
@@ -299,7 +298,7 @@ class TagViewSet(viewsets.ModelViewSet):
     ViewSet for Tag management.
     """
     
-    queryset = Tag.objects.filter(is_active=True)
+    queryset = Tag.objects.all()
     serializer_class = TagSerializer
     permission_classes = [IsEditorOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -310,12 +309,39 @@ class TagViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Return tags with article counts."""
-        return Tag.objects.filter(
-            is_active=True,
-            is_deleted=False
-        ).annotate(
+        queryset = Tag.objects.all()
+        
+        # Filter for active tags unless user is editor/admin
+        if not (self.request.user.is_authenticated and (self.request.user.role in ['editor', 'admin'] or self.request.user.is_staff)):
+            queryset = queryset.filter(is_active=True)
+            
+        return queryset.annotate(
             article_count=Count('article', filter=Q(article__status='published'))
-        )
+        ).order_by('name')
+
+    def create(self, request, *args, **kwargs):
+        """Create a tag, handling duplicates gracefully."""
+        from django.db import IntegrityError
+        from rest_framework.exceptions import ValidationError
+        
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            # Check if tag exists
+            name = request.data.get('name')
+            if name:
+                existing = Tag.objects.filter(name__iexact=name).first()
+                if existing:
+                    return APIResponse.error(
+                        message=f"Tag '{name}' already exists.",
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
+            raise
+        except ValidationError as e:
+            return APIResponse.error(
+                message=str(e.detail) if hasattr(e, 'detail') else str(e),
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
     
     def destroy(self, request, *args, **kwargs):
         """Delete a tag and handle related articles."""
@@ -436,19 +462,33 @@ class ArticleViewSet(viewsets.ModelViewSet):
         """Return articles based on user permissions."""
         queryset = Article.objects.filter(is_deleted=False).select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories')
         
-        # If user is not authenticated or is a reader, only show published articles
-        if not self.request.user.is_authenticated or self.request.user.role == 'reader':
-            queryset = queryset.filter(status='published')
-        # If user is a reporter, show their own articles and published articles
-        elif self.request.user.role == 'reporter':
-            queryset = queryset.filter(
+        # For archive/unarchive actions, allow access to archived articles
+        archive_actions = ['archive', 'unarchive', 'archive_from_primary', 'unarchive_from_primary', 
+                          'archive_from_secondary', 'unarchive_from_secondary', 'archive_from_specific_secondary',
+                          'restore_to_specific_secondary']
+        
+        if self.action in archive_actions:
+            # For archive/unarchive actions, editors/admins can access all articles
+            # Reporters can access their own articles regardless of status
+            if self.request.user.is_authenticated and (self.request.user.role in ['editor', 'admin'] or self.request.user.is_staff):
+                return queryset
+            if self.request.user.is_authenticated:
+                return queryset.filter(author=self.request.user)
+            # Anonymous users cannot perform archive actions (handled by permissions)
+            return queryset
+        
+        # Editors and admins can see all articles
+        if self.request.user.is_authenticated and (self.request.user.role in ['editor', 'admin'] or self.request.user.is_staff):
+            return queryset
+
+        # For authenticated users (readers, reporters), show published OR own articles
+        if self.request.user.is_authenticated:
+            return queryset.filter(
                 Q(status='published') | Q(author=self.request.user)
             )
-        # Editors and admins can see all articles
-        elif self.request.user.role in ['editor', 'admin'] or self.request.user.is_staff:
-            pass  # Show all articles
         
-        return queryset
+        # For anonymous users, only show published articles
+        return queryset.filter(status='published')
     
     def perform_create(self, serializer):
         """Set author when creating article."""
@@ -458,7 +498,19 @@ class ArticleViewSet(viewsets.ModelViewSet):
         """Set updated_by when updating article."""
         serializer.save(updated_by=self.request.user)
     
-    @action(detail=True, methods=['post'])
+    def destroy(self, request, *args, **kwargs):
+        """
+        Hard delete the article.
+        Per user requirement, this is a permanent delete, not soft delete.
+        """
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        instance.hard_delete()
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
     def view(self, request, pk=None):
         """Record article view."""
         article = self.get_object()
@@ -478,7 +530,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
         
         return APIResponse.success(message="View recorded")
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
         """Like/unlike article."""
         article = self.get_object()
@@ -495,16 +547,108 @@ class ArticleViewSet(viewsets.ModelViewSet):
         )
         
         if created:
+            # Completely new like
             article.like_count += 1
             article.save(update_fields=['like_count'])
-            return APIResponse.success(message="Article liked")
+            message = "Article liked"
+            is_liked = True
         else:
-            like.delete()
-            article.like_count -= 1
-            article.save(update_fields=['like_count'])
-            return APIResponse.success(message="Article unliked")
+            # Existing record found - check if it's soft deleted
+            if getattr(like, 'is_deleted', False):
+                # Was unliked (soft deleted), now re-liking
+                like.is_deleted = False
+                like.deleted_at = None
+                like.save()
+                article.like_count += 1
+                article.save(update_fields=['like_count'])
+                message = "Article liked"
+                is_liked = True
+            else:
+                # Was liked, now unliking
+                like.delete()
+                if article.like_count > 0:
+                    article.like_count -= 1
+                article.save(update_fields=['like_count'])
+                message = "Article unliked"
+                is_liked = False
+            
+        return APIResponse.success(
+            data={
+                'like_count': article.like_count,
+                'is_liked': is_liked
+            },
+            message=message
+        )
+            
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def toggle_save(self, request, pk=None):
+        """Save/unsave article."""
+        article = self.get_object()
+        
+        if not request.user.is_authenticated:
+            return APIResponse.error(
+                message="Authentication required",
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Use localized import to avoid circular dependency
+        from .models import ArticleSave
+        
+        save_obj, created = ArticleSave.objects.get_or_create(
+            article=article,
+            user=request.user
+        )
+        
+        if created:
+            # Completely new save
+            message = "Article saved"
+            is_saved = True
+        else:
+            # Existing record found - check if it's soft deleted
+            if getattr(save_obj, 'is_deleted', False):
+                # Was unsaved (soft deleted), now re-saving
+                save_obj.is_deleted = False
+                save_obj.deleted_at = None
+                save_obj.save()
+                message = "Article saved"
+                is_saved = True
+            else:
+                # Was saved, now unsaving
+                save_obj.delete()
+                message = "Article removed from saved"
+                is_saved = False
+        
+        return APIResponse.success(
+            data={
+                'is_saved': is_saved
+            },
+            message=message
+        )
+
+    @action(detail=False, methods=['get'])
+    def saved(self, request):
+        """Get processed saved articles for the current user."""
+        if not request.user.is_authenticated:
+             return APIResponse.error(
+                 message="Authentication required",
+                 status_code=status.HTTP_401_UNAUTHORIZED
+             )
+        
+        saved_articles = Article.objects.filter(
+            saves__user=request.user, 
+            saves__is_deleted=False,
+            saves__isnull=False
+        ).distinct().order_by('-saves__created_at')
+        
+        page = self.paginate_queryset(saved_articles)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(saved_articles, many=True)
+        return APIResponse.success(data=serializer.data, message="Saved articles retrieved")
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
     def share(self, request, pk=None):
         """Record article share."""
         article = self.get_object()
@@ -528,9 +672,52 @@ class ArticleViewSet(viewsets.ModelViewSet):
         article = self.get_object()
         
         if article.archive_from_primary_category(manual=True):
-            return APIResponse.success(message="Article archived from primary category")
+            # Refresh from database to get updated fields
+            article.refresh_from_db()
+            serializer = self.get_serializer(article, context={'request': request})
+            return APIResponse.success(
+                data=serializer.data,
+                message="Article archived from primary category"
+            )
         else:
             return APIResponse.error(message="Article has no primary category to archive")
+    
+    @action(detail=True, methods=['post'])
+    @extend_schema(
+        summary="Unarchive from Primary Category",
+        description="Restore article from primary category archive",
+        responses={
+            200: {"description": "Article unarchived from primary category successfully"},
+            400: {"description": "Article is not archived from primary category"},
+            404: {"description": "Article not found"}
+        },
+        tags=["Article Archiving"]
+    )
+    def unarchive_from_primary(self, request, pk=None):
+        """Unarchive/restore article from primary category."""
+        article = self.get_object()
+        
+        # Check if article is archived from primary category
+        if not article.is_primary_archived:
+            return APIResponse.error(
+                message="Article is not archived from primary category. Only archived articles can be unarchived.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Restore from primary category
+        if article.restore_from_primary_category():
+            # Refresh from database to get updated fields
+            article.refresh_from_db()
+            serializer = self.get_serializer(article, context={'request': request})
+            return APIResponse.success(
+                data=serializer.data,
+                message="Article unarchived from primary category"
+            )
+        else:
+            return APIResponse.error(
+                message="Failed to unarchive article from primary category",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['post'])
     def archive_from_secondary(self, request, pk=None):
@@ -538,9 +725,52 @@ class ArticleViewSet(viewsets.ModelViewSet):
         article = self.get_object()
         
         if article.archive_from_secondary_categories(manual=True):
-            return APIResponse.success(message="Article archived from secondary categories")
+            # Refresh from database to get updated fields
+            article.refresh_from_db()
+            serializer = self.get_serializer(article, context={'request': request})
+            return APIResponse.success(
+                data=serializer.data,
+                message="Article archived from secondary categories"
+            )
         else:
             return APIResponse.error(message="Article has no secondary categories to archive")
+    
+    @action(detail=True, methods=['post'])
+    @extend_schema(
+        summary="Unarchive from Secondary Categories",
+        description="Restore article from secondary categories archive",
+        responses={
+            200: {"description": "Article unarchived from secondary categories successfully"},
+            400: {"description": "Article is not archived from secondary categories"},
+            404: {"description": "Article not found"}
+        },
+        tags=["Article Archiving"]
+    )
+    def unarchive_from_secondary(self, request, pk=None):
+        """Unarchive/restore article from secondary categories."""
+        article = self.get_object()
+        
+        # Check if article is archived from secondary categories
+        if not article.is_secondary_archived:
+            return APIResponse.error(
+                message="Article is not archived from secondary categories. Only archived articles can be unarchived.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Restore from secondary categories
+        if article.restore_from_secondary_categories():
+            # Refresh from database to get updated fields
+            article.refresh_from_db()
+            serializer = self.get_serializer(article, context={'request': request})
+            return APIResponse.success(
+                data=serializer.data,
+                message="Article unarchived from secondary categories"
+            )
+        else:
+            return APIResponse.error(
+                message="Failed to unarchive article from secondary categories",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['post'])
     @extend_schema(
@@ -762,6 +992,116 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(articles, many=True, context={'request': request})
         return APIResponse.success(data=serializer.data, message="Trending articles retrieved")
     
+    @action(detail=False, methods=['get'], url_path='by_user/(?P<user_id>[^/.]+)')
+    @extend_schema(
+        summary="Get Articles by User",
+        description="Retrieve articles posted by a specific user ID",
+        parameters=[
+            {
+                'name': 'user_id',
+                'in': 'path',
+                'description': 'ID of the user whose articles to retrieve',
+                'required': True,
+                'schema': {'type': 'integer'}
+            },
+            {
+                'name': 'status',
+                'in': 'query',
+                'description': 'Filter by article status (optional)',
+                'required': False,
+                'schema': {'type': 'string', 'enum': ['draft', 'pending', 'published', 'archived']}
+            },
+            {
+                'name': 'page',
+                'in': 'query',
+                'description': 'Page number for pagination',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 1}
+            },
+            {
+                'name': 'page_size',
+                'in': 'query',
+                'description': 'Number of items per page',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 20}
+            },
+            {
+                'name': 'ordering',
+                'in': 'query',
+                'description': 'Field to order by (e.g., -created_at, -published_at)',
+                'required': False,
+                'schema': {'type': 'string', 'default': '-created_at'}
+            }
+        ],
+        responses={
+            200: {"description": "Articles retrieved successfully"},
+            400: {"description": "Invalid user_id parameter"},
+            404: {"description": "User not found"}
+        },
+        tags=["Articles"]
+    )
+    def by_user(self, request, user_id=None):
+        """Get articles posted by a specific user."""
+        if not user_id:
+            return APIResponse.error(
+                message="user_id is required in the URL path",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user_id = int(user_id)
+        except (ValueError, TypeError):
+            return APIResponse.error(
+                message="user_id must be a valid integer",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user exists
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return APIResponse.error(
+                message=f"User with ID {user_id} not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get articles by this user
+        articles = self.get_queryset().filter(author_id=user_id)
+        
+        # Optional status filter
+        status_filter = request.GET.get('status')
+        if status_filter:
+            articles = articles.filter(status=status_filter)
+        
+        # Apply ordering
+        ordering = request.GET.get('ordering', '-created_at')
+        if ordering.lstrip('-') in ['created_at', 'updated_at', 'published_at', 'view_count', 'like_count']:
+            articles = articles.order_by(ordering)
+        else:
+            articles = articles.order_by('-created_at')
+        
+        # Pagination
+        page = self.paginate_queryset(articles)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(articles, many=True, context={'request': request})
+        return APIResponse.success(
+            data={
+                'articles': serializer.data,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': getattr(user, 'email', None)
+                },
+                'total_count': articles.count()
+            },
+            message=f"Retrieved {len(serializer.data)} article(s) by user {user.username}"
+        )
+    
     @action(detail=True, methods=['get'])
     @extend_schema(
         summary="Get Related Articles",
@@ -800,39 +1140,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
             related_articles_query |= Q(primary_category=article.primary_category)
 
 
-class ContactViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for Contact submissions.
-    """
-    
-    queryset = Contact.objects.all()
-    serializer_class = ContactSerializer
-    permission_classes = [permissions.AllowAny]
-    
-    def get_permissions(self):
-        """
-        Allow any user to create a contact submission.
-        Only admins can list/retrieve submissions.
-        """
-        if self.action == 'create':
-            permission_classes = [permissions.AllowAny]
-        else:
-            permission_classes = [permissions.IsAdminUser]
-        return [permission() for permission in permission_classes]
-    
-    def perform_create(self, serializer):
-        """Save contact submission."""
-        serializer.save()
-        
-    @extend_schema(
-        summary="Submit Contact Form",
-        description="Submit a new contact message.",
-        responses={201: ContactSerializer},
-        tags=["Contact"]
-    )
-    def create(self, request, *args, **kwargs):
-        """Create a new contact submission."""
-        return super().create(request, *args, **kwargs)
 
         
         # Add secondary category matches
@@ -926,6 +1233,207 @@ class ContactViewSet(viewsets.ModelViewSet):
                 }
             },
             message=f"Retrieved {len(serializer.data)} related article(s)"
+        )
+    
+    @action(detail=False, methods=['get'])
+    @extend_schema(
+        summary="Get Archived Articles",
+        description="Get all archived articles including those archived via status='archived' or category-specific archiving",
+        parameters=[
+            {
+                'name': 'page',
+                'in': 'query',
+                'description': 'Page number for pagination',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 1}
+            },
+            {
+                'name': 'page_size',
+                'in': 'query',
+                'description': 'Number of items per page',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 20}
+            },
+            {
+                'name': 'ordering',
+                'in': 'query',
+                'description': 'Field to order by (e.g., -created_at, -updated_at)',
+                'required': False,
+                'schema': {'type': 'string', 'default': '-updated_at'}
+            }
+        ],
+        responses={
+            200: {"description": "Archived articles retrieved successfully"},
+            403: {"description": "Permission denied"}
+        },
+        tags=["Article Archiving"]
+    )
+    def archived(self, request):
+        """Get all archived articles."""
+        # Only editors, admins, and staff can view archived articles
+        if not request.user.is_authenticated or not (request.user.role in ['editor', 'admin'] or request.user.is_staff):
+            return APIResponse.error(
+                message="Permission denied. Only editors and admins can view archived articles.",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get archived articles - include both general archiving (status='archived') 
+        # and category-specific archiving (primary_category_archived_at or secondary_categories_archived_at)
+        now = timezone.now()
+        archived_articles = Article.objects.filter(
+            is_deleted=False
+        ).annotate(
+            has_archived_secondary=Count('archived_secondary_categories')
+        ).filter(
+            Q(status='archived') |
+            Q(primary_category_archived_at__isnull=False) |
+            Q(secondary_categories_archived_at__isnull=False) |
+            Q(has_archived_secondary__gt=0) |
+            Q(primary_category_expires_at__lte=now, primary_category_expires_at__isnull=False) |
+            Q(secondary_categories_expire_at__lte=now, secondary_categories_expire_at__isnull=False)
+        ).select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories', 'archived_secondary_categories').distinct()
+        
+        # Apply ordering
+        ordering = request.GET.get('ordering', '-updated_at')
+        if ordering.lstrip('-') in ['created_at', 'updated_at', 'published_at', 'view_count', 'like_count']:
+            archived_articles = archived_articles.order_by(ordering)
+        else:
+            archived_articles = archived_articles.order_by('-updated_at')
+        
+        # Pagination
+        page = self.paginate_queryset(archived_articles)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(archived_articles, many=True, context={'request': request})
+        return APIResponse.success(
+            data=serializer.data,
+            message=f"Retrieved {len(serializer.data)} archived article(s)"
+        )
+    
+    @action(detail=True, methods=['post'])
+    @extend_schema(
+        summary="Archive Article",
+        description="Archive an article by setting its status to 'archived'",
+        responses={
+            200: {"description": "Article archived successfully"},
+            400: {"description": "Article is already archived"},
+            404: {"description": "Article not found"}
+        },
+        tags=["Article Archiving"]
+    )
+    def archive(self, request, pk=None):
+        """Archive an article by setting status to 'archived'."""
+        article = self.get_object()
+        
+        # Check if article is already archived
+        if article.status == 'archived':
+            return APIResponse.error(
+                message="Article is already archived.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Archive the article
+        success, previous_status = article.archive()
+        
+        if success:
+            serializer = self.get_serializer(article, context={'request': request})
+            return APIResponse.success(
+                data=serializer.data,
+                message=f"Article archived successfully (previous status: '{previous_status}')"
+            )
+        else:
+            return APIResponse.error(
+                message="Failed to archive article",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['post'])
+    @extend_schema(
+        summary="Unarchive/Restore Article",
+        description="Restore an archived article by changing its status from 'archived' to another status",
+        request={
+            "type": "object",
+            "properties": {
+                "restore_to_status": {
+                    "type": "string",
+                    "enum": ["draft", "pending", "published"],
+                    "description": "Status to restore the article to (default: 'draft')",
+                    "default": "draft"
+                }
+            },
+            "required": []
+        },
+        responses={
+            200: {"description": "Article unarchived successfully"},
+            400: {"description": "Article is not archived"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Article not found"}
+        },
+        tags=["Article Archiving"]
+    )
+    def unarchive(self, request, pk=None):
+        """Unarchive/restore an article."""
+        article = self.get_object()
+        
+        # Refresh from database to ensure we have the latest status
+        article.refresh_from_db()
+        
+        # Check if article is archived in any way
+        is_generally_archived = article.status == 'archived'
+        is_primary_archived = article.is_primary_archived
+        is_secondary_archived = article.is_secondary_archived
+        
+        if not (is_generally_archived or is_primary_archived or is_secondary_archived):
+            return APIResponse.error(
+                message=f"Article is not archived. Current status: '{article.status}'. Only archived articles can be unarchived.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Track what was unarchived
+        unarchived_items = []
+        
+        # Handle general archiving (status='archived')
+        if is_generally_archived:
+            restore_to_status = request.data.get('restore_to_status', 'draft')
+            success, new_status = article.unarchive(restore_to_status=restore_to_status)
+            if success:
+                unarchived_items.append(f"status restored to '{new_status}'")
+            else:
+                return APIResponse.error(
+                    message="Failed to unarchive article status",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Handle primary category archiving
+        if is_primary_archived:
+            if article.restore_from_primary_category():
+                unarchived_items.append("primary category")
+            else:
+                return APIResponse.error(
+                    message="Failed to unarchive from primary category",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Handle secondary categories archiving
+        if is_secondary_archived:
+            if article.restore_from_secondary_categories():
+                unarchived_items.append("secondary categories")
+            else:
+                return APIResponse.error(
+                    message="Failed to unarchive from secondary categories",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Refresh from database to get updated fields
+        article.refresh_from_db()
+        serializer = self.get_serializer(article, context={'request': request})
+        
+        message = f"Article unarchived: {', '.join(unarchived_items)}"
+        return APIResponse.success(
+            data=serializer.data,
+            message=message
         )
 
 
@@ -1191,7 +1699,19 @@ class VideoViewSet(viewsets.ModelViewSet):
         else:
             serializer.save()
     
-    @action(detail=True, methods=['post'])
+    def destroy(self, request, *args, **kwargs):
+        """
+        Hard delete the video.
+        Per user requirement, this is a permanent delete.
+        """
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        instance.hard_delete()
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
     def view(self, request, pk=None):
         """Record video view."""
         video = self.get_object()
@@ -1252,3 +1772,38 @@ class VideoViewSet(viewsets.ModelViewSet):
         )[:10]
         serializer = self.get_serializer(videos, many=True, context={'request': request})
         return APIResponse.success(data=serializer.data, message="Trending videos retrieved")
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Contact submissions.
+    """
+    
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_permissions(self):
+        """
+        Allow any user to create a contact submission.
+        Only admins can list/retrieve submissions.
+        """
+        if self.action == 'create':
+            permission_classes = [permissions.AllowAny]
+        else:
+            permission_classes = [permissions.IsAdminUser]
+        return [permission() for permission in permission_classes]
+    
+    def perform_create(self, serializer):
+        """Save contact submission."""
+        serializer.save()
+        
+    @extend_schema(
+        summary="Submit Contact Form",
+        description="Submit a new contact message.",
+        responses={201: ContactSerializer},
+        tags=["Contact"]
+    )
+    def create(self, request, *args, **kwargs):
+        """Create a new contact submission."""
+        return super().create(request, *args, **kwargs)

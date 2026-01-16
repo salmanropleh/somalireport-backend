@@ -227,6 +227,33 @@ class Article(AuditModel):
         
         return True
     
+    @property
+    def is_primary_archived(self):
+        """Check if article is archived from primary category."""
+        if not self.primary_category:
+            return False
+        # Check if manually archived
+        if self.primary_category_archived_at:
+            return True
+        # Check if auto-archiving is set and expired
+        if self.primary_category_expires_at and timezone.now() > self.primary_category_expires_at:
+            return True
+        return False
+    
+    @property
+    def is_secondary_archived(self):
+        """Check if article is archived from secondary categories."""
+        # Check if manually archived (old method)
+        if self.secondary_categories_archived_at:
+            return True
+        # Check if auto-archiving is set and expired
+        if self.secondary_categories_expire_at and timezone.now() > self.secondary_categories_expire_at:
+            return True
+        # Check if any categories are in archived_secondary_categories
+        if self.archived_secondary_categories.exists():
+            return True
+        return False
+    
     def archive_from_primary_category(self, manual=True):
         """Archive article from primary category."""
         if self.primary_category:
@@ -239,6 +266,22 @@ class Article(AuditModel):
         """Archive article from secondary categories."""
         if self.secondary_categories.exists():
             self.secondary_categories_archived_at = timezone.now()
+            self.save(update_fields=['secondary_categories_archived_at'])
+            return True
+        return False
+    
+    def restore_from_primary_category(self):
+        """Restore article from primary category archive."""
+        if self.primary_category_archived_at:
+            self.primary_category_archived_at = None
+            self.save(update_fields=['primary_category_archived_at'])
+            return True
+        return False
+    
+    def restore_from_secondary_categories(self):
+        """Restore article from secondary categories archive."""
+        if self.secondary_categories_archived_at:
+            self.secondary_categories_archived_at = None
             self.save(update_fields=['secondary_categories_archived_at'])
             return True
         return False
@@ -304,6 +347,28 @@ class Article(AuditModel):
         else:
             self.secondary_categories_expire_at = None
         self.save(update_fields=['secondary_categories_expire_at'])
+    
+    def archive(self):
+        """Archive the article by setting status to 'archived'."""
+        if self.status != 'archived':
+            previous_status = self.status
+            self.status = 'archived'
+            self.save(update_fields=['status'])
+            return True, previous_status
+        return False, None
+    
+    def unarchive(self, restore_to_status='draft'):
+        """Unarchive/restore the article by changing status from 'archived' to specified status."""
+        if self.status == 'archived':
+            # Validate the restore status
+            valid_statuses = [choice[0] for choice in self.STATUS_CHOICES if choice[0] != 'archived']
+            if restore_to_status not in valid_statuses:
+                restore_to_status = 'draft'  # Default to draft if invalid
+            
+            self.status = restore_to_status
+            self.save(update_fields=['status'])
+            return True, restore_to_status
+        return False, None
     
     def extract_media_urls_from_content(self):
         """Extract media URLs from article content."""
@@ -509,6 +574,24 @@ class ArticleLike(AuditModel):
     
     def __str__(self):
         return f"{self.user.email} likes {self.article.title}"
+
+
+class ArticleSave(AuditModel):
+    """
+    Track saved articles.
+    """
+    
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='saves')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_articles')
+    
+    class Meta:
+        db_table = 'article_saves'
+        verbose_name = 'Saved Article'
+        verbose_name_plural = 'Saved Articles'
+        unique_together = ['article', 'user']
+    
+    def __str__(self):
+        return f"{self.user.email} saved {self.article.title}"
 
 
 class ArticleShare(AuditModel):
