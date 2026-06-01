@@ -4,7 +4,7 @@ URL patterns for content app.
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, TagViewSet, ArticleViewSet, MediaFileViewSet, VideoViewSet, ContactViewSet
+from .views import CategoryViewSet, TagViewSet, ArticleViewSet, MediaFileViewSet, VideoViewSet, ContactViewSet, prerender_article
 
 router = DefaultRouter()
 router.register(r'categories', CategoryViewSet)
@@ -18,4 +18,5 @@ app_name = 'content'
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('prerender/article/<int:pk>/', prerender_article, name='prerender-article'),
 ]
