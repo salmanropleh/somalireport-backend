@@ -668,7 +668,10 @@ class AuthorViewSet(viewsets.ViewSet):
         from rest_framework.pagination import PageNumberPagination
 
         try:
-            author = User.objects.get(pk=pk)
+            if str(pk).isdigit():
+                author = User.objects.get(pk=pk)
+            else:
+                author = User.objects.get(username=pk)
         except User.DoesNotExist:
             return APIResponse.error(message="Author not found", status_code=404)
 

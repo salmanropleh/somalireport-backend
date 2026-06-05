@@ -123,6 +123,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
     """
 
     author_name = serializers.SerializerMethodField()
+    author_username = serializers.SerializerMethodField()
     display_author_name = serializers.SerializerMethodField()
     display_author_affiliation = serializers.SerializerMethodField()
     primary_category_name = serializers.CharField(source='primary_category.name', read_only=True)
@@ -143,7 +144,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'status', 'priority',
-            'author', 'author_name', 'display_author_name', 'display_author_affiliation',
+            'author', 'author_name', 'author_username', 'display_author_name', 'display_author_affiliation',
             'primary_category', 'primary_category_name',
             'secondary_categories', 'secondary_category_names',
             'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
@@ -171,6 +172,9 @@ class ArticleListSerializer(serializers.ModelSerializer):
     def get_author_name(self, obj):
         """Get the automatic author name (original author)."""
         return obj.author.full_name if obj.author else None
+
+    def get_author_username(self, obj):
+        return obj.author.username if obj.author else None
 
     def get_display_author_name(self, obj):
         """Get the author name to display based on toggle."""
@@ -200,6 +204,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     """
 
     author_name = serializers.SerializerMethodField()
+    author_username = serializers.SerializerMethodField()
     author_photo_url = serializers.SerializerMethodField()
     author_bio = serializers.SerializerMethodField()
     display_author_name = serializers.SerializerMethodField()
@@ -225,7 +230,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'slug', 'excerpt', 'content', 'status', 'priority',
-            'author', 'author_name', 'author_photo_url', 'author_bio', 'display_author_name', 'display_author_affiliation',
+            'author', 'author_name', 'author_username', 'author_photo_url', 'author_bio', 'display_author_name', 'display_author_affiliation',
             'primary_category', 'primary_category_name',
             'secondary_categories', 'secondary_category_names',
             'tags', 'tag_names', 'featured_image', 'featured_image_url', 'featured_image_display_url',
@@ -245,6 +250,9 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     def get_author_name(self, obj):
         """Get the automatic author name (original author)."""
         return obj.author.full_name if obj.author else None
+
+    def get_author_username(self, obj):
+        return obj.author.username if obj.author else None
 
     def get_author_photo_url(self, obj):
         """Get author's profile photo URL."""
