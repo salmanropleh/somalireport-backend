@@ -1,5 +1,6 @@
 """
 Development settings for Somali Report Backend project.
+Backend runs on: http://127.0.0.1:8000  (python manage.py runserver 8000)
 """
 
 from .base import *

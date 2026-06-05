@@ -10,6 +10,14 @@ from django.core.files.base import ContentFile
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import User, UserProfile, UserSession, PasswordResetCode
 from core.utils import ValidationHelper
+
+
+class AuthorPublicSerializer(serializers.ModelSerializer):
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'full_name', 'username', 'bio', 'avatar', 'role', 'date_joined']
 import requests
 from urllib.parse import urlparse
 import os
