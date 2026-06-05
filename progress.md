@@ -32,4 +32,9 @@ Added `author_username` field to both `ArticleListSerializer` and `ArticleDetail
 Returns the linked author's username, or `null` for manual/anonymous authors.
 Used by the frontend to build clean author profile URLs (`/author/username`).
 
+### Updated: `accounts/views.py` — Username lookup
+`AuthorViewSet.retrieve()` now supports both integer ID and username string lookup:
+- `/authors/1/` — lookup by ID
+- `/authors/MikeManyibe/` — lookup by username
+
 ---
