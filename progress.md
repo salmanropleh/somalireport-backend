@@ -38,3 +38,41 @@ Used by the frontend to build clean author profile URLs (`/author/username`).
 - `/authors/MikeManyibe/` — lookup by username
 
 ---
+
+## 2026-06-06 — Social Share Prerender Fix
+
+### Updated: `content/views.py` — `prerender_article`
+- Removed `<meta http-equiv="refresh" content="0; url=..."/>` from the prerender HTML
+  - **Why**: WhatsApp and Twitter bots were following the redirect to `somalireport.com/article/...` (the React SPA), which has no OG tags at render time. Both platforms showed only the domain name with no image or title.
+  - **To revert**: add back `parts.append(f'<meta http-equiv="refresh" content="0; url={article_url}"/>')`
+- Added explicit `twitter:title` and `twitter:description` meta tags
+  - Previously only `twitter:card` and `twitter:image` were present; Twitter was falling back to `og:` tags inconsistently
+
+### Nginx Fix Pending (Digital Ocean Droplet)
+The droplet's nginx proxies bot prerender requests to `localhost:8000` but no Django process runs there. Until fixed, WhatsApp previews will not show images/title. Fix: update `/etc/nginx/sites-available/somalireport`:
+
+**Current (broken):**
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Replace with:**
+```nginx
+location /api/ {
+    proxy_pass https://salmanr.pythonanywhere.com;
+    proxy_set_header Host salmanr.pythonanywhere.com;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_ssl_server_name on;
+}
+```
+Then: `nginx -t && systemctl reload nginx`
+
+---
