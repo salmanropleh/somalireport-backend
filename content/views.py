@@ -1846,7 +1846,11 @@ def prerender_article(request, pk):
     parts.append(f'<meta property="og:url" content="{article_url}"/>')
     parts.append(f'<meta property="og:image" content="{image_url}"/>')
     parts.append(f'<meta name="twitter:card" content="summary_large_image"/>')
+    parts.append(f'<meta name="twitter:title" content="{title}"/>')
+    parts.append(f'<meta name="twitter:description" content="{description}"/>')
     parts.append(f'<meta name="twitter:image" content="{image_url}"/>')
-    parts.append(f'<meta http-equiv="refresh" content="0; url={article_url}"/>')
+    # REMOVED: meta http-equiv="refresh" — was causing WhatsApp/Twitter bots to follow
+    # the redirect to the SPA (index.html) instead of reading the OG tags here.
+    # To revert: add back → parts.append(f'<meta http-equiv="refresh" content="0; url={article_url}"/>')
     parts.append(f'</head><body><a href="{article_url}">{title}</a></body></html>')
     return HttpResponse(''.join(parts), content_type='text/html; charset=utf-8')
