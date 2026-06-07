@@ -1823,13 +1823,15 @@ class ContactViewSet(viewsets.ModelViewSet):
 @require_GET
 def prerender_article(request, pk):
     SITE_URL = 'https://somalireport.com'
+    BACKEND_URL = 'https://salmanr.pythonanywhere.com'
     FALLBACK_IMAGE = f'{SITE_URL}/og-default.png'
     try:
         article = Article.objects.select_related('author').get(pk=pk, status='published')
     except Article.DoesNotExist:
         return HttpResponse(status=404)
     if article.featured_image:
-        image_url = request.build_absolute_uri(article.featured_image.url)
+        # Use backend URL directly — somalireport.com has no /media/ route, only PythonAnywhere serves media files
+        image_url = f'{BACKEND_URL}{article.featured_image.url}'
     elif article.featured_image_url:
         image_url = article.featured_image_url
     else:
