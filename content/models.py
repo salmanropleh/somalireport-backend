@@ -148,8 +148,15 @@ class Article(AuditModel):
     def save(self, *args, **kwargs):
         """Auto-generate slug and excerpt if not provided."""
         if not self.slug:
-            self.slug = StringHelper.slugify(self.title)
-        
+            base_slug = StringHelper.slugify(self.title)
+            slug = base_slug
+            counter = 2
+            qs = Article.objects.exclude(pk=self.pk)
+            while qs.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+
         if not self.excerpt:
             self.excerpt = StringHelper.extract_excerpt(self.content)
         
@@ -517,7 +524,14 @@ class Video(AuditModel):
     def save(self, *args, **kwargs):
         """Auto-generate slug if not provided."""
         if not self.slug:
-            self.slug = StringHelper.slugify(self.title)
+            base_slug = StringHelper.slugify(self.title)
+            slug = base_slug
+            counter = 2
+            qs = Video.objects.exclude(pk=self.pk)
+            while qs.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
         super().save(*args, **kwargs)
     
     @property
