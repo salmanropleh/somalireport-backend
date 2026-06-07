@@ -76,3 +76,19 @@ location /api/ {
 Then: `nginx -t && systemctl reload nginx`
 
 ---
+
+## 2026-06-07 — OG Image URL Fix + Slug Uniqueness
+
+### Updated: `content/views.py` — `prerender_article` image URL
+- Changed `request.build_absolute_uri(article.featured_image.url)` → `f'{BACKEND_URL}{article.featured_image.url}'`
+  - **Why**: `request.build_absolute_uri()` was using the incoming request host (`somalireport.com`) to build the image URL. When Twitter/WhatsApp bots fetched `og:image` at `https://somalireport.com/media/uploads/...`, the droplet nginx has no `/media/` route and returned the SPA instead of the image — Twitter showed a newspaper icon, WhatsApp showed only the domain.
+  - **Fix**: hardcode `BACKEND_URL = 'https://salmanr.pythonanywhere.com'` so the image URL always points directly to PythonAnywhere where media files are served.
+  - Confirmed working: Twitter card shows full article image; WhatsApp cached URLs (previously shared before the fix) expire naturally in 1–3 days.
+
+### Updated: `content/models.py` — Slug uniqueness for `Article` and `Video`
+- Both `Article.save()` and `Video.save()` previously called `StringHelper.slugify(self.title)` and saved it directly, causing `IntegrityError: UNIQUE constraint failed: articles.slug` if two articles shared a title.
+- **Fix**: generate `base_slug`, then loop checking `Article.objects.exclude(pk=self.pk).filter(slug=slug).exists()` — appends `-2`, `-3`, etc. until unique.
+- Same logic applied to `Video.save()`.
+- **Why this matters**: editors may publish follow-up articles under the same headline (e.g. breaking news updates). Without this fix, the second article throws a 500 and is lost.
+
+---
