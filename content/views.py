@@ -1238,6 +1238,76 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     @extend_schema(
+        summary="Get Draft Articles",
+        description="Get draft articles. Admins/editors see all drafts, reporters see only their own.",
+        parameters=[
+            {
+                'name': 'page',
+                'in': 'query',
+                'description': 'Page number for pagination',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 1}
+            },
+            {
+                'name': 'page_size',
+                'in': 'query',
+                'description': 'Number of items per page',
+                'required': False,
+                'schema': {'type': 'integer', 'default': 20}
+            },
+            {
+                'name': 'ordering',
+                'in': 'query',
+                'description': 'Field to order by (e.g., -created_at)',
+                'required': False,
+                'schema': {'type': 'string', 'default': '-created_at'}
+            }
+        ],
+        responses={
+            200: {"description": "Draft articles retrieved successfully"},
+            401: {"description": "Authentication required"}
+        },
+        tags=["Articles"]
+    )
+    def drafts(self, request):
+        """Get draft articles. Admins/editors see all, reporters see only their own."""
+        if not request.user.is_authenticated:
+            return APIResponse.error(
+                message="Authentication required.",
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+
+        draft_articles = Article.objects.filter(is_deleted=False, status='draft')
+
+        # Admins and editors see all drafts; reporters see only their own
+        if request.user.role not in ['admin', 'editor'] and not request.user.is_staff:
+            draft_articles = draft_articles.filter(author=request.user)
+
+        draft_articles = draft_articles.select_related(
+            'author', 'primary_category'
+        ).prefetch_related(
+            'tags', 'secondary_categories'
+        )
+
+        ordering = request.GET.get('ordering', '-created_at')
+        if ordering.lstrip('-') in ['created_at', 'updated_at', 'published_at', 'view_count', 'like_count']:
+            draft_articles = draft_articles.order_by(ordering)
+        else:
+            draft_articles = draft_articles.order_by('-created_at')
+
+        page = self.paginate_queryset(draft_articles)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(draft_articles, many=True, context={'request': request})
+        return APIResponse.success(
+            data=serializer.data,
+            message=f"Retrieved {len(serializer.data)} draft article(s)"
+        )
+
+    @action(detail=False, methods=['get'])
+    @extend_schema(
         summary="Get Archived Articles",
         description="Get archived articles. Admins/staff see all archived articles, other users see only their own authored archived articles.",
         parameters=[
