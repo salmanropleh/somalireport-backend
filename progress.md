@@ -85,6 +85,14 @@ Then: `nginx -t && systemctl reload nginx`
   - **Fix**: hardcode `BACKEND_URL = 'https://salmanr.pythonanywhere.com'` so the image URL always points directly to PythonAnywhere where media files are served.
   - Confirmed working: Twitter card shows full article image; WhatsApp cached URLs (previously shared before the fix) expire naturally in 1–3 days.
 
+### New: `GET /articles/drafts/` endpoint (`content/views.py`)
+- Added `drafts` action to `ArticleViewSet`, mirroring the existing `archived` pattern
+- Authenticated admins/editors see all draft articles; reporters see only their own; unauthenticated requests return 401
+- Supports `ordering` and pagination query params
+- **Why**: the generic `/articles/?status=draft` route was having its auth token stripped by the frontend's `isPublicEndpoint()` check, so the backend always saw an anonymous user and returned empty results for the Draft tab
+
+---
+
 ### Updated: `content/models.py` — Slug uniqueness for `Article` and `Video`
 - Both `Article.save()` and `Video.save()` previously called `StringHelper.slugify(self.title)` and saved it directly, causing `IntegrityError: UNIQUE constraint failed: articles.slug` if two articles shared a title.
 - **Fix**: generate `base_slug`, then loop checking `Article.objects.exclude(pk=self.pk).filter(slug=slug).exists()` — appends `-2`, `-3`, etc. until unique.
