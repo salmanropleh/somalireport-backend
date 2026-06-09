@@ -2,6 +2,38 @@
 
 ---
 
+## 2026-06-09 — WSGI Crash Fix: `delay=True` on FileHandler
+
+### Incident
+The backend was completely down from approximately 09:54 to 12:52 (UTC+3). Every incoming request triggered a new WSGI worker, which immediately crashed with:
+```
+ValueError: Unable to configure handler 'file'
+```
+This meant Django couldn't start at all — no requests were served during this window.
+
+### Root Cause
+PythonAnywhere hosts home directories on NFS (network filesystem). Starting around 07:48, the NFS had a transient write failure (`OSError: write error` visible in `django.log`). Around 09:54, PythonAnywhere's automatic WSGI worker recycling kicked in and tried to start a new worker. Django's startup calls `dictConfig()` on the `LOGGING` setting, which immediately tries to open `django.log` via `logging.FileHandler`. With NFS still flaky, this open failed — wrapped and re-raised as `ValueError: Unable to configure handler 'file'`. Every subsequent worker recycle produced the same crash loop until NFS recovered at ~12:52.
+
+No deployment was made on June 9. The crash was triggered purely by routine worker recycling during an NFS hiccup.
+
+### Fix: `config/settings/base.py`
+Added `'delay': True` to the `'file'` logging handler:
+```python
+'file': {
+    'class': 'logging.FileHandler',
+    'filename': BASE_DIR / 'logs' / 'django.log',
+    'formatter': 'verbose',
+    'delay': True,  # <-- this line
+},
+```
+`delay=True` defers file opening until the first log record is written, instead of at handler creation time (during `dictConfig()`). A transient NFS failure at worker startup can no longer crash the app — Django starts successfully and degrades gracefully if the first write later fails.
+
+### Other findings
+- `django.db.utils.OperationalError: database is locked` visible in the log before the crash — SQLite lock contention from multiple WSGI workers. Not the cause of this outage but worth monitoring.
+- Disk space is not an issue: 1.3 TB free on the NFS volume.
+
+---
+
 ## 2026-06-05 — Author Profile Endpoint
 
 ### New: `AuthorViewSet` (`accounts/views.py`)
