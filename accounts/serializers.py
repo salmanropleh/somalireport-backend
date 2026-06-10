@@ -18,6 +18,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class AuthorPublicSerializer(serializers.ModelSerializer):
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'full_name', 'username', 'bio', 'avatar', 'role', 'date_joined']
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """
     Serializer for user registration.
