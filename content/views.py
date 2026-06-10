@@ -487,12 +487,20 @@ class ArticleViewSet(viewsets.ModelViewSet):
         return queryset.filter(status='published')
     
     def perform_create(self, serializer):
-        """Set author when creating article."""
-        serializer.save(author=self.request.user)
+        """Set author when creating article. Auto-set published_at if created as published."""
+        extra = {'author': self.request.user}
+        if serializer.validated_data.get('status') == 'published':
+            extra.setdefault('published_at', serializer.validated_data.get('published_at') or timezone.now())
+        serializer.save(**extra)
     
     def perform_update(self, serializer):
-        """Set updated_by when updating article."""
-        serializer.save(updated_by=self.request.user)
+        """Set updated_by when updating article. Auto-set published_at on first publish."""
+        instance = serializer.instance
+        incoming_status = serializer.validated_data.get('status', instance.status)
+        extra = {'updated_by': self.request.user}
+        if incoming_status == 'published' and not instance.published_at:
+            extra['published_at'] = timezone.now()
+        serializer.save(**extra)
     
     def destroy(self, request, *args, **kwargs):
         """
