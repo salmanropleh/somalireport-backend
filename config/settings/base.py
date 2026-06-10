@@ -243,6 +243,7 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': BASE_DIR / 'logs' / 'django.log',
             'formatter': 'verbose',
+            'delay': True,
         },
         'console': {
             'level': env('LOG_LEVEL', default='INFO'),

@@ -181,23 +181,6 @@ class ScrapedArticleViewSet(viewsets.ModelViewSet):
             )
         
         try:
-            # Optionally download and save image
-            download_image = request.data.get('download_image', False)
-            featured_image = None
-            featured_image_url = scraped_article.image_url
-            
-            if download_image and scraped_article.image_url:
-                from .services import NewsScrapingService
-                media_file = NewsScrapingService.download_and_save_image(
-                    image_url=scraped_article.image_url,
-                    article_title=scraped_article.title,
-                    user=request.user
-                )
-                if media_file:
-                    featured_image = media_file.file
-                    # Keep URL as fallback
-                    featured_image_url = scraped_article.image_url
-            
             # Create article from scraped article
             article = Article.objects.create(
                 title=scraped_article.title,
@@ -205,8 +188,7 @@ class ScrapedArticleViewSet(viewsets.ModelViewSet):
                 content=scraped_article.content,
                 author=request.user,
                 status='published',
-                featured_image=featured_image,
-                featured_image_url=featured_image_url,
+                featured_image_url=scraped_article.image_url,
                 published_at=scraped_article.published_at,
                 primary_category=scraped_article.category  # Apply category from scraped article
             )
@@ -220,10 +202,7 @@ class ScrapedArticleViewSet(viewsets.ModelViewSet):
             scraped_article.save()
             
             return APIResponse.success(
-                data={
-                    'article_id': article.id,
-                    'image_downloaded': featured_image is not None
-                },
+                data={'article_id': article.id},
                 message=f"Article '{article.title}' published successfully"
             )
             

@@ -5,7 +5,14 @@ Production settings for Somali Report Backend project.
 from .base import *
 
 # Override base settings for production
-DEBUG = False
+DEBUG = True
+
+# ALLOWED_HOSTS - add your PythonAnywhere domain and any custom domains
+# Ensure PythonAnywhere domain is always included
+default_hosts = ['*']
+env_allowed_hosts = env.list('ALLOWED_HOSTS', default=[])
+# Merge environment hosts with defaults, ensuring no duplicates
+ALLOWED_HOSTS = list(set(env_allowed_hosts + default_hosts))
 
 # ALLOWED_HOSTS - add your PythonAnywhere domain and any custom domains
 # Ensure PythonAnywhere domain is always included
@@ -86,7 +93,7 @@ SENTRY_DSN = env('SENTRY_DSN', default='')
 if SENTRY_DSN:
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
-    
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],
