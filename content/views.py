@@ -8,7 +8,9 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.utils.html import escape
 from django.db.models import Q, Count
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
@@ -1815,3 +1817,32 @@ class ContactViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Create a new contact submission."""
         return super().create(request, *args, **kwargs)
+
+def prerender_article(request, pk):
+    SITE_URL = 'https://somalireport.com'
+    FALLBACK_IMAGE = f'{SITE_URL}/og-default.png'
+    try:
+        article = Article.objects.select_related('author').get(pk=pk, status='published')
+    except Article.DoesNotExist:
+        return HttpResponse(status=404)
+    if article.featured_image:
+        image_url = request.build_absolute_uri(article.featured_image.url)
+    elif article.featured_image_url:
+        image_url = article.featured_image_url
+    else:
+        image_url = FALLBACK_IMAGE
+    article_url = f'{SITE_URL}/article/{article.id}/{article.slug}'
+    title = escape(article.meta_title or article.title)
+    description = escape((article.excerpt or article.meta_description or '')[:200])
+    parts = []
+    parts.append('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>')
+    parts.append(f'<title>{title} | Somali Report</title>')
+    parts.append(f'<meta property="og:type" content="article"/>')
+    parts.append(f'<meta property="og:title" content="{title}"/>')
+    parts.append(f'<meta property="og:description" content="{description}"/>')
+    parts.append(f'<meta property="og:url" content="{article_url}"/>')
+    parts.append(f'<meta property="og:image" content="{image_url}"/>')
+    parts.append(f'<meta name="twitter:card" content="summary_large_image"/>')
+    parts.append(f'<meta name="twitter:image" content="{image_url}"/>')
+    parts.append(f'</head><body><a href="{article_url}">{title}</a></body></html>')
+    return HttpResponse(''.join(parts), content_type='text/html; charset=utf-8')
