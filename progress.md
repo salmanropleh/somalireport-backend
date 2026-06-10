@@ -2,6 +2,36 @@
 
 ---
 
+## 2026-06-10 — Restore Features Lost in Merge
+
+Another developer merged a new branch (Google Indexing API, sitemap, newsletter) via `4fcea1e`. The merge restored `AuthorViewSet` and `prerender_article` but dropped three of our previous features from `content/views.py` and `content/serializers.py`.
+
+### Lost and Restored: `author_username` (`content/serializers.py`)
+- `author_username = serializers.SerializerMethodField()` and `get_author_username()` were missing from both `ArticleListSerializer` and `ArticleDetailSerializer`
+- **Impact**: Frontend author profile links were completely broken — the link condition `!show_manual_author && author_username` was always false because the API returned `null`, so author names rendered as plain unclickable text instead of links to `/author/:username`
+- **Fix**: Restored field declaration, `'author_username'` in Meta fields, and `get_author_username()` method in both serializers
+
+### Lost and Restored: `/articles/drafts/` endpoint (`content/views.py`)
+- The entire `drafts` action was missing from `ArticleViewSet`
+- **Impact**: Draft tab in admin showed no articles
+- **Fix**: Restored full `drafts` action — authenticated admins/editors see all drafts, reporters see only their own, unauthenticated returns 401
+
+### Lost and Restored: Prerender fixes (`content/views.py`)
+- `prerender_article` was restored by the other dev but in an older broken form:
+  - `BACKEND_URL = 'https://salmanr.pythonanywhere.com'` was gone — reverted to `request.build_absolute_uri()` which builds image URLs pointing to `somalireport.com` (no `/media/` route there), breaking Twitter/WhatsApp image previews
+  - `twitter:title` and `twitter:description` meta tags were missing
+- **Fix**: Restored `BACKEND_URL`, hardcoded image URL construction, and both twitter meta tags
+
+### New from other developer (untouched)
+- Google Indexing API (`content/indexing.py`, `content/signals.py`) — auto-submits published articles to Google
+- Sitemap (`content/sitemaps.py`) — dynamic sitemap via Django
+- `robots.txt` template
+- Newsletter app (full new Django app)
+- `published_at` auto-set on status transition to published
+- New migrations (0006–0012)
+
+---
+
 ## 2026-06-09 — WSGI Crash Fix: `delay=True` on FileHandler
 
 ### Incident
