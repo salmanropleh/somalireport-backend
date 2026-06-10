@@ -19,8 +19,7 @@ from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
     UserUpdateSerializer, UserProfileSerializer, PasswordChangeSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    UserSessionSerializer, CustomTokenObtainPairSerializer, TokenRefreshSerializer,
-    AuthorPublicSerializer
+    UserSessionSerializer, CustomTokenObtainPairSerializer, TokenRefreshSerializer
 )
 from core.utils import APIResponse
 from core.permissions import IsOwnerOrAdmin
@@ -649,50 +648,3 @@ class TokenStatusView(APIView):
                 message="Invalid token",
                 status_code=status.HTTP_401_UNAUTHORIZED
             )
-
-class AuthorViewSet(viewsets.ViewSet):
-    permission_classes = [permissions.AllowAny]
-
-    def list(self, request):
-        from content.models import Article
-        author_ids = Article.objects.filter(
-            status='published', is_deleted=False
-        ).values_list('author_id', flat=True).distinct()
-        authors = User.objects.filter(id__in=author_ids).order_by('first_name')
-        serializer = AuthorPublicSerializer(authors, many=True, context={'request': request})
-        return APIResponse.success(data=serializer.data, message="Authors retrieved")
-
-    def retrieve(self, request, pk=None):
-        from content.models import Article
-        from content.serializers import ArticleListSerializer
-        from rest_framework.pagination import PageNumberPagination
-
-        try:
-            if str(pk).isdigit():
-                author = User.objects.get(pk=pk)
-            else:
-                author = User.objects.get(username=pk)
-        except User.DoesNotExist:
-            return APIResponse.error(message="Author not found", status_code=404)
-
-        articles = Article.objects.filter(
-            author=author, status='published', is_deleted=False
-        ).select_related('author', 'primary_category').prefetch_related(
-            'tags', 'secondary_categories'
-        ).order_by('-published_at')
-
-        paginator = PageNumberPagination()
-        paginator.page_size = 10
-        page = paginator.paginate_queryset(articles, request)
-        articles_data = ArticleListSerializer(page, many=True, context={'request': request}).data
-
-        return APIResponse.success(data={
-            'author': AuthorPublicSerializer(author, context={'request': request}).data,
-            'stats': {'article_count': articles.count()},
-            'articles': {
-                'count': articles.count(),
-                'next': paginator.get_next_link(),
-                'previous': paginator.get_previous_link(),
-                'results': articles_data,
-            }
-        }, message="Author profile retrieved")

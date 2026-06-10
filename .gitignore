@@ -106,7 +106,6 @@ celerybeat.pid
 .venv
 env/
 venv/
-myenv/
 ENV/
 env.bak/
 venv.bak/
@@ -153,8 +152,9 @@ Thumbs.db
 # Redis
 dump.rdb
 
-# Frontend (separate repo)
-frontend/
+# Google service account credentials — never commit
+google-sa-key.json
+*-sa-key.json
 
 # Node.js (if using frontend tools)
 node_modules/
@@ -170,3 +170,17 @@ ARCHITECTURE_GUIDE.md
 FLOW_DIAGRAMS.md
 QUICK_REFERENCE.md
 TECHNICAL_DOCUMENTATION.txt
+
+#settings
+config/settings/dev.py
+config/settings/dev_clean.py
+config/settings/production.py
+config/settings/staging.py
+config/settings/base.py
+config/settings/local.py
+config/settings/test.py
+config/settings/testing.py
+config/settings/development.py
+config/settings/production.py
+google-sa-key.json
+*-sa-key.json

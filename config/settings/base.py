@@ -27,6 +27,8 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
+SITE_URL = env('SITE_URL', default='https://somalireport.com')
+
 # Application definition
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -35,6 +37,7 @@ DJANGO_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sitemaps',
 ]
 
 THIRD_PARTY_APPS = [
@@ -51,6 +54,7 @@ LOCAL_APPS = [
     'content',
     'comments',
     'scraper',
+    'newsletter',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
