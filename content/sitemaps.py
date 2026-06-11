@@ -1,11 +1,21 @@
+from django.conf import settings
 from django.contrib.sitemaps import Sitemap
 
 from core.utils import StringHelper
 from .models import Article, Category, Tag
 
+SITE_DOMAIN = getattr(settings, 'SITE_URL', 'https://somalireport.com').replace('https://', '').replace('http://', '').rstrip('/')
 
-class StaticSitemap(Sitemap):
+
+class _SomaliSitemap(Sitemap):
+    """Base class that always uses the canonical production domain."""
     protocol = 'https'
+
+    def get_domain(self, site=None):
+        return SITE_DOMAIN
+
+
+class StaticSitemap(_SomaliSitemap):
 
     def items(self):
         return [
@@ -25,9 +35,8 @@ class StaticSitemap(Sitemap):
         return item[2]
 
 
-class ArticleSitemap(Sitemap):
+class ArticleSitemap(_SomaliSitemap):
     changefreq = 'weekly'
-    protocol = 'https'
 
     def items(self):
         return Article.objects.filter(status='published').order_by('-published_at')
@@ -47,10 +56,9 @@ class ArticleSitemap(Sitemap):
         return 0.7
 
 
-class CategorySitemap(Sitemap):
+class CategorySitemap(_SomaliSitemap):
     changefreq = 'daily'
     priority = 0.8
-    protocol = 'https'
 
     def items(self):
         return Category.objects.filter(is_active=True)
@@ -62,10 +70,9 @@ class CategorySitemap(Sitemap):
         return obj.updated_at
 
 
-class TagSitemap(Sitemap):
+class TagSitemap(_SomaliSitemap):
     changefreq = 'weekly'
     priority = 0.5
-    protocol = 'https'
 
     def items(self):
         return Tag.objects.filter(is_active=True)
