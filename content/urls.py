@@ -4,7 +4,7 @@ URL patterns for content app.
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, TagViewSet, ArticleViewSet, MediaFileViewSet, VideoViewSet, ContactViewSet, prerender_article
+from .views import CategoryViewSet, TagViewSet, ArticleViewSet, MediaFileViewSet, VideoViewSet, ContactViewSet, BannerViewSet, prerender_article
 
 router = DefaultRouter()
 router.register(r'categories', CategoryViewSet)
@@ -13,6 +13,7 @@ router.register(r'articles', ArticleViewSet)
 router.register(r'media', MediaFileViewSet)
 router.register(r'videos', VideoViewSet)
 router.register(r'contact', ContactViewSet)
+router.register(r'banners', BannerViewSet)
 
 app_name = 'content'
 

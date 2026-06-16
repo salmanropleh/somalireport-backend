@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Video, Category, Tag
+from .models import Video, Category, Tag, Banner
 
 # Register your models here.
 
@@ -52,3 +52,30 @@ class TagAdmin(admin.ModelAdmin):
     list_filter = ['is_active', 'created_at']
     search_fields = ['name', 'slug', 'description']
     readonly_fields = ['slug', 'created_at', 'updated_at']
+
+
+@admin.register(Banner)
+class BannerAdmin(admin.ModelAdmin):
+    """Admin configuration for Banner model."""
+    list_display   = ['title', 'slot', 'is_active', 'starts_at', 'ends_at',
+                      'view_count', 'click_count', 'created_at']
+    list_filter    = ['is_active', 'slot']
+    list_editable  = ['is_active']
+    search_fields  = ['title', 'alt_text']
+    readonly_fields = ['view_count', 'click_count', 'image_display_url',
+                       'created_at', 'updated_at']
+    fieldsets = (
+        ('Content', {
+            'fields': ('title', 'image', 'image_url', 'image_display_url', 'alt_text', 'link_url')
+        }),
+        ('Placement', {
+            'fields': ('slot', 'is_active', 'starts_at', 'ends_at')
+        }),
+        ('Analytics', {
+            'fields': ('view_count', 'click_count')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )

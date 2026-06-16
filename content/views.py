@@ -9,7 +9,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.utils.html import escape
-from django.db.models import Q, Count
+from django.db.models import Q, Count, F
+from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.core.files.storage import default_storage
@@ -19,16 +20,16 @@ import mimetypes
 from PIL import Image
 from drf_spectacular.utils import extend_schema
 
-from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare, Contact
+from .models import Category, Tag, Article, MediaFile, Video, ArticleView, ArticleLike, ArticleShare, Contact, Banner
 from .serializers import (
     CategorySerializer, TagSerializer, ArticleListSerializer,
     ArticleDetailSerializer, ArticleCreateUpdateSerializer,
     MediaFileSerializer, ArticleViewSerializer, ArticleLikeSerializer,
     ArticleShareSerializer, VideoListSerializer, VideoDetailSerializer, VideoCreateUpdateSerializer,
-    ContactSerializer
+    ContactSerializer, BannerSerializer
 )
 from core.utils import APIResponse
-from core.permissions import IsEditorOrReadOnly, IsReporterOrReadOnly, IsOwnerOrReadOnly
+from core.permissions import IsEditorOrReadOnly, IsReporterOrReadOnly, IsOwnerOrReadOnly, IsAdminOrReadOnly
 
 class CategoryViewSet(viewsets.ModelViewSet):
     """
@@ -1895,6 +1896,66 @@ class ContactViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Create a new contact submission."""
         return super().create(request, *args, **kwargs)
+
+class BannerViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Banner management.
+
+    Public (no auth): GET list filtered by slot + is_active, POST /view/, POST /click/
+    Admin only: create, update, delete, activate, deactivate
+    """
+
+    queryset         = Banner.objects.all()
+    serializer_class = BannerSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    parser_classes   = [MultiPartParser, FormParser]
+    filter_backends  = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['slot', 'is_active']
+    ordering_fields  = ['slot', 'created_at']
+    ordering         = ['slot', '-created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Public reads get only active banners within their scheduled window
+        if self.request.method == 'GET' and not (
+            self.request.user and self.request.user.is_staff
+        ):
+            now = timezone.now()
+            qs = qs.filter(is_active=True).filter(
+                Q(starts_at__isnull=True) | Q(starts_at__lte=now)
+            ).filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gte=now)
+            )
+        return qs
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
+    def view(self, request, pk=None):
+        """Track an impression. No authentication required."""
+        Banner.objects.filter(pk=pk).update(view_count=models.F('view_count') + 1)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
+    def click(self, request, pk=None):
+        """Track a click. No authentication required."""
+        Banner.objects.filter(pk=pk).update(click_count=models.F('click_count') + 1)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def activate(self, request, pk=None):
+        """Set is_active = True."""
+        banner = self.get_object()
+        banner.is_active = True
+        banner.save(update_fields=['is_active', 'updated_at'])
+        return Response({'id': banner.id, 'is_active': True})
+
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Set is_active = False."""
+        banner = self.get_object()
+        banner.is_active = False
+        banner.save(update_fields=['is_active', 'updated_at'])
+        return Response({'id': banner.id, 'is_active': False})
+
 
 def prerender_article(request, pk):
     SITE_URL = 'https://somalireport.com'

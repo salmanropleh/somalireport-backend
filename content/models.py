@@ -656,3 +656,41 @@ class Contact(AuditModel):
     
     def __str__(self):
         return f"Message from {self.name}: {self.subject}"
+
+
+class Banner(AuditModel):
+    """
+    Homepage banner / advertisement.
+    Slot number determines placement position on the homepage.
+    Supports image file upload (PNG/JPG/GIF) or an external image URL.
+    """
+
+    title       = models.CharField(max_length=255)
+    slot        = models.PositiveIntegerField(
+                      help_text="Slot 1 = above Trending. Additional slots TBD."
+                  )
+    image       = models.ImageField(upload_to='banners/', blank=True, null=True)
+    image_url   = models.URLField(blank=True, help_text="External image or hosted GIF URL")
+    link_url    = models.URLField(blank=True, help_text="URL the banner links to on click")
+    alt_text    = models.CharField(max_length=255, blank=True)
+    is_active   = models.BooleanField(default=False)
+    starts_at   = models.DateTimeField(null=True, blank=True)
+    ends_at     = models.DateTimeField(null=True, blank=True)
+    view_count  = models.PositiveIntegerField(default=0, editable=False)
+    click_count = models.PositiveIntegerField(default=0, editable=False)
+
+    class Meta:
+        db_table = 'banners'
+        verbose_name = 'Banner'
+        verbose_name_plural = 'Banners'
+        ordering = ['slot', '-created_at']
+
+    def __str__(self):
+        status = 'Active' if self.is_active else 'Inactive'
+        return f"{self.title} [Slot {self.slot}] ({status})"
+
+    @property
+    def image_display_url(self):
+        if self.image:
+            return self.image.url
+        return self.image_url or None
