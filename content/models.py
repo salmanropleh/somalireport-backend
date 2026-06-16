@@ -669,9 +669,11 @@ class Banner(AuditModel):
     slot        = models.PositiveIntegerField(
                       help_text="Slot 1 = above Trending. Additional slots TBD."
                   )
-    image       = models.ImageField(upload_to='banners/', blank=True, null=True)
-    image_url   = models.URLField(blank=True, help_text="External image or hosted GIF URL")
-    link_url    = models.URLField(blank=True, help_text="URL the banner links to on click")
+    image            = models.ImageField(upload_to='banners/', blank=True, null=True)
+    image_url        = models.URLField(blank=True, help_text="External image or hosted GIF URL (desktop)")
+    mobile_image     = models.ImageField(upload_to='banners/mobile/', blank=True, null=True)
+    mobile_image_url = models.URLField(blank=True, help_text="External image or hosted GIF URL (mobile)")
+    link_url         = models.URLField(blank=True, help_text="URL the banner links to on click")
     alt_text    = models.CharField(max_length=255, blank=True)
     is_active   = models.BooleanField(default=False)
     starts_at   = models.DateTimeField(null=True, blank=True)
@@ -694,3 +696,9 @@ class Banner(AuditModel):
         if self.image:
             return self.image.url
         return self.image_url or None
+
+    @property
+    def mobile_image_display_url(self):
+        if self.mobile_image:
+            return self.mobile_image.url
+        return self.mobile_image_url or None

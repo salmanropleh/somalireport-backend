@@ -568,13 +568,15 @@ class BannerSerializer(serializers.ModelSerializer):
     regardless of whether the image is a local upload or an external URL.
     """
 
-    image_display_url = serializers.SerializerMethodField()
+    image_display_url        = serializers.SerializerMethodField()
+    mobile_image_display_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Banner
         fields = [
             'id', 'title', 'slot',
             'image', 'image_url', 'image_display_url',
+            'mobile_image', 'mobile_image_url', 'mobile_image_display_url',
             'link_url', 'alt_text',
             'is_active', 'starts_at', 'ends_at',
             'view_count', 'click_count',
@@ -582,12 +584,20 @@ class BannerSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'view_count', 'click_count', 'created_at', 'updated_at']
 
+    def _abs(self, request, url):
+        return request.build_absolute_uri(url) if request else url
+
     def get_image_display_url(self, obj):
         request = self.context.get('request')
         if obj.image:
-            url = obj.image.url
-            return request.build_absolute_uri(url) if request else url
+            return self._abs(request, obj.image.url)
         return obj.image_url or None
+
+    def get_mobile_image_display_url(self, obj):
+        request = self.context.get('request')
+        if obj.mobile_image:
+            return self._abs(request, obj.mobile_image.url)
+        return obj.mobile_image_url or None
 
     def validate_image(self, image):
         from PIL import Image as PILImage
@@ -595,9 +605,22 @@ class BannerSerializer(serializers.ModelSerializer):
         min_w, min_h = 1200, 218
         if img.width < min_w or img.height < min_h:
             raise serializers.ValidationError(
-                f"Banner must be at least {min_w}×{min_h}px "
+                f"Desktop banner must be at least {min_w}×{min_h}px "
                 f"(uploaded: {img.width}×{img.height}px). "
                 f"Recommended: 1500×273px."
+            )
+        image.seek(0)
+        return image
+
+    def validate_mobile_image(self, image):
+        from PIL import Image as PILImage
+        img = PILImage.open(image)
+        min_w, min_h = 400, 200
+        if img.width < min_w or img.height < min_h:
+            raise serializers.ValidationError(
+                f"Mobile banner must be at least {min_w}×{min_h}px "
+                f"(uploaded: {img.width}×{img.height}px). "
+                f"Recommended: 600×400px."
             )
         image.seek(0)
         return image
