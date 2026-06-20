@@ -1959,15 +1959,15 @@ class BannerViewSet(viewsets.ModelViewSet):
 
 def prerender_article(request, pk):
     SITE_URL = 'https://somalireport.com'
-    BACKEND_URL = 'https://salmanr.pythonanywhere.com'
     FALLBACK_IMAGE = f'{SITE_URL}/og-default.png'
     try:
         article = Article.objects.select_related('author').get(pk=pk, status='published')
     except Article.DoesNotExist:
         return HttpResponse(status=404)
     if article.featured_image:
-        # Use backend URL directly — somalireport.com has no /media/ route, only PythonAnywhere serves media files
-        image_url = f'{BACKEND_URL}{article.featured_image.url}'
+        # Use .name (raw stored path) not .url — .url may include an absolute MEDIA_URL
+        # prefix which causes a double-domain URL when prepended with SITE_URL
+        image_url = f'{SITE_URL}/media/{article.featured_image.name}'
     elif article.featured_image_url:
         image_url = article.featured_image_url
     else:
@@ -1986,6 +1986,7 @@ def prerender_article(request, pk):
     parts.append(f'<meta name="twitter:card" content="summary_large_image"/>')
     parts.append(f'<meta name="twitter:title" content="{title}"/>')
     parts.append(f'<meta name="twitter:description" content="{description}"/>')
+    parts.append(f'<meta name="twitter:image" content="{image_url}"/>')
     # REMOVED: meta http-equiv="refresh" — was causing WhatsApp/Twitter bots to follow
     # the redirect to the SPA (index.html) instead of reading the OG tags here.
     parts.append(f'</head><body><a href="{article_url}">{title}</a></body></html>')

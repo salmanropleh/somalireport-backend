@@ -2,6 +2,53 @@
 
 ---
 
+## 2026-06-20 — Prerender Twitter Image Fix
+
+### Updated: `content/views.py` — `prerender_article`
+- **Removed `BACKEND_URL`** — backend has moved from PythonAnywhere to the Digital Ocean droplet; `SITE_URL = 'https://somalireport.com'` is now the single base URL for both the site and media
+- **Fixed double-domain image URL bug** — previous code did `f'{BACKEND_URL}{article.featured_image.url}'`; when `MEDIA_URL` env var is set to an absolute URL (e.g. `https://somalireport.com/media/`), `article.featured_image.url` returns a full absolute URL and the concatenation produced a broken double-domain URL like `https://salmanr.pythonanywhere.comhttps://somalireport.com/media/...`. Fixed by using `article.featured_image.name` (the raw stored path, e.g. `articles/image.webp`) and building `f'{SITE_URL}/media/{article.featured_image.name}'`
+- **Added `twitter:image` meta tag** — was missing; only `og:image` was present. Twitter needs the explicit `twitter:image` tag for the card image
+- **Why**: Article 236 shared on Twitter showed a newspaper icon instead of the article image. Article 216 had worked because its URL was captured when `MEDIA_URL` pointed to PythonAnywhere directly
+
+---
+
+## 2026-06-16 — Banner System
+
+### New: `Banner` model (`content/models.py`)
+- Added `Banner(AuditModel)` with fields: `title`, `slot`, `image`, `image_url`, `mobile_image`, `mobile_image_url`, `link_url`, `alt_text`, `is_active`, `starts_at`, `ends_at`, `view_count`, `click_count`
+- `slot` determines homepage placement (1 = above Trending, 2 = Business→Diaspora, 3 = after Somali World)
+- Supports uploaded image files (PNG/JPG/GIF) or external URLs for both desktop and mobile
+- `image_display_url` and `mobile_image_display_url` properties resolve the active image source
+- `db_table = 'banners'`, ordered by `['slot', '-created_at']`
+
+### New: `BannerSerializer` (`content/serializers.py`)
+- Exposes `image_display_url` and `mobile_image_display_url` as SerializerMethodFields with absolute URL resolution
+- `validate_image`: enforces minimum 1200×218px for desktop images
+- `validate_mobile_image`: enforces minimum 400×200px for mobile images
+
+### New: `BannerViewSet` (`content/views.py`)
+- `MultiPartParser` + `FormParser` for image file uploads
+- Public reads filtered to `is_active=True` and within `starts_at`/`ends_at` window
+- Custom actions: `view` (track view), `click` (track click), `activate`, `deactivate`
+- View/click tracking uses `F()` expressions for atomic counter increments
+
+### New: `/api/v1/banners/` endpoint (`content/urls.py`)
+- Registered `BannerViewSet` on `banners` router prefix
+
+### New: `BannerAdmin` (`content/admin.py`)
+- List display with `list_editable = ['is_active']` and analytics fieldset
+
+### Migrations
+- `0013_banner` — creates `banners` table
+- `0014_banner_mobile_image` — adds `mobile_image` and `mobile_image_url` fields
+
+### Production deployment note
+- All migrations must be run with `DJANGO_SETTINGS_MODULE=config.settings.prod` on the droplet
+- `manage.py` defaults to `config.settings.dev` (SQLite); gunicorn uses prod (PostgreSQL)
+- Command: `DJANGO_SETTINGS_MODULE=config.settings.prod python3 manage.py migrate`
+
+---
+
 ## 2026-06-10 — Restore Features Lost in Merge
 
 Another developer merged a new branch (Google Indexing API, sitemap, newsletter) via `4fcea1e`. The merge restored `AuthorViewSet` and `prerender_article` but dropped three of our previous features from `content/views.py` and `content/serializers.py`.
