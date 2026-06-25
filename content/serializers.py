@@ -365,8 +365,22 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
         
         if manual_author_image and manual_author_image_url:
             data['manual_author_image_url'] = None
-        
+
         return data
+
+    def validate_featured_image(self, image):
+        from PIL import Image as PILImage
+        img = PILImage.open(image)
+        allowed = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+        if img.format not in allowed:
+            fmt = img.format or 'unknown'
+            raise serializers.ValidationError(
+                f"Unsupported image format: {fmt}. "
+                f"Please upload a JPEG, PNG, WebP, or GIF image. "
+                f"AVIF is not supported by Twitter/X."
+            )
+        image.seek(0)
+        return image
 
 
 class ArticleViewSerializer(serializers.ModelSerializer):
@@ -602,6 +616,12 @@ class BannerSerializer(serializers.ModelSerializer):
     def validate_image(self, image):
         from PIL import Image as PILImage
         img = PILImage.open(image)
+        allowed = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+        if img.format not in allowed:
+            fmt = img.format or 'unknown'
+            raise serializers.ValidationError(
+                f"Unsupported format: {fmt}. Use JPEG, PNG, WebP, or GIF."
+            )
         min_w, min_h = 1200, 218
         if img.width < min_w or img.height < min_h:
             raise serializers.ValidationError(
@@ -615,6 +635,12 @@ class BannerSerializer(serializers.ModelSerializer):
     def validate_mobile_image(self, image):
         from PIL import Image as PILImage
         img = PILImage.open(image)
+        allowed = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+        if img.format not in allowed:
+            fmt = img.format or 'unknown'
+            raise serializers.ValidationError(
+                f"Unsupported format: {fmt}. Use JPEG, PNG, WebP, or GIF."
+            )
         min_w, min_h = 400, 200
         if img.width < min_w or img.height < min_h:
             raise serializers.ValidationError(
