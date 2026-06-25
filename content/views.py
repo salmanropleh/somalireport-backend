@@ -1958,36 +1958,42 @@ class BannerViewSet(viewsets.ModelViewSet):
 
 
 def prerender_article(request, pk):
-    SITE_URL = 'https://somalireport.com'
+    from django.conf import settings as django_settings
+    SITE_URL = getattr(django_settings, 'SITE_URL', 'https://somalireport.com')
     FALLBACK_IMAGE = f'{SITE_URL}/og-default.png'
     try:
         article = Article.objects.select_related('author').get(pk=pk, status='published')
     except Article.DoesNotExist:
         return HttpResponse(status=404)
-    if article.featured_image:
-        # Use .name (raw stored path) not .url — .url may include an absolute MEDIA_URL
-        # prefix which causes a double-domain URL when prepended with SITE_URL
-        image_url = f'{SITE_URL}/media/{article.featured_image.name}'
-    elif article.featured_image_url:
-        image_url = article.featured_image_url
+
+    display_url = article.featured_image_display_url
+    if display_url:
+        if display_url.startswith('http://') or display_url.startswith('https://'):
+            image_url = display_url
+        else:
+            image_url = f'{SITE_URL}{display_url}'
     else:
         image_url = FALLBACK_IMAGE
+
     article_url = f'{SITE_URL}/article/{article.id}/{article.slug}'
     title = escape(article.meta_title or article.title)
-    description = escape((article.excerpt or article.meta_description or '')[:200])
-    parts = []
-    parts.append('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>')
+    description = escape((article.meta_description or article.excerpt or '')[:200])
+
+    parts = ['<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>']
     parts.append(f'<title>{title} | Somali Report</title>')
     parts.append(f'<meta property="og:type" content="article"/>')
+    parts.append(f'<meta property="og:site_name" content="Somali Report"/>')
     parts.append(f'<meta property="og:title" content="{title}"/>')
     parts.append(f'<meta property="og:description" content="{description}"/>')
     parts.append(f'<meta property="og:url" content="{article_url}"/>')
     parts.append(f'<meta property="og:image" content="{image_url}"/>')
+    parts.append(f'<meta property="og:image:width" content="1200"/>')
+    parts.append(f'<meta property="og:image:height" content="630"/>')
     parts.append(f'<meta name="twitter:card" content="summary_large_image"/>')
+    parts.append(f'<meta name="twitter:site" content="@SomaliReport"/>')
+    parts.append(f'<meta name="twitter:creator" content="@SomaliReport"/>')
     parts.append(f'<meta name="twitter:title" content="{title}"/>')
     parts.append(f'<meta name="twitter:description" content="{description}"/>')
     parts.append(f'<meta name="twitter:image" content="{image_url}"/>')
-    # REMOVED: meta http-equiv="refresh" — was causing WhatsApp/Twitter bots to follow
-    # the redirect to the SPA (index.html) instead of reading the OG tags here.
     parts.append(f'</head><body><a href="{article_url}">{title}</a></body></html>')
     return HttpResponse(''.join(parts), content_type='text/html; charset=utf-8')

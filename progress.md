@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-06-25 — Prerender Endpoint Full Fix
+
+### Updated: `content/views.py` — `prerender_article` (lines 1960–1999)
+- **Switched to `featured_image_display_url`** — replaces the manual `f'{SITE_URL}/media/{article.featured_image.name}'` approach; model property handles both `ImageField` and `featured_image_url` field correctly
+- **Added absolute URL check** — if `featured_image_display_url` starts with `http://` or `https://` (external URL field), it's used as-is; otherwise prepended with `SITE_URL`
+- **Fixed description priority** — was `excerpt or meta_description`; corrected to `meta_description or excerpt` to match frontend behaviour
+- **Added missing tags:** `og:site_name`, `og:image:width` (1200), `og:image:height` (630), `twitter:site` (@SomaliReport), `twitter:creator` (@SomaliReport)
+- **Uses `django.conf.settings` for `SITE_URL`** — falls back to `'https://somalireport.com'` if not set
+- **Why**: Twitter/WhatsApp previews were still failing. Frontend middleware now routes all social bots directly to this endpoint, so it must be complete and correct. See `Somali_Report_NextJs/prerender-fix.md` for the full fix context
+
+---
+
 ## 2026-06-20 — Prerender Twitter Image Fix
 
 ### Updated: `content/views.py` — `prerender_article`
