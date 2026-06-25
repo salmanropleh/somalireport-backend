@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-06-25 — AVIF Upload Validation
+
+### Updated: `content/serializers.py`
+- **Added `validate_featured_image`** to `ArticleCreateUpdateSerializer` — rejects AVIF and any non-JPEG/PNG/WebP/GIF format using PIL format detection (`img.format not in {'JPEG', 'PNG', 'WEBP', 'GIF'}`)
+- **Added format check** to `BannerSerializer.validate_image` and `validate_mobile_image` — same whitelist before the existing dimension check
+- Error message: "Unsupported image format: AVIF. Please upload a JPEG, PNG, WebP, or GIF image. AVIF is not supported by Twitter/X."
+- **Why**: Article 249 was uploaded with an AVIF featured image. AVIF silently breaks Twitter/X card previews — displays fine on-site and Facebook but Twitter shows a newspaper placeholder icon instead of the article image.
+
+---
+
 ## 2026-06-25 — Prerender Endpoint Full Fix
 
 ### Updated: `content/views.py` — `prerender_article` (lines 1960–1999)
