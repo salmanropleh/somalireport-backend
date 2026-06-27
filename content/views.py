@@ -448,7 +448,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
     permission_classes = [IsReporterOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'primary_category', 'secondary_categories', 'tags', 'author', 'is_featured', 'is_breaking']
+    filterset_fields = ['status', 'primary_category', 'secondary_categories', 'tags', 'author', 'is_featured', 'is_breaking', 'priority']
     search_fields = ['title', 'excerpt', 'content']
     ordering_fields = ['created_at', 'published_at', 'view_count', 'like_count']
     ordering = ['-created_at']
