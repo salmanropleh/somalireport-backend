@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-06-27 — Category Articles: Duplicates, Search 404, Ordering
+
+### Updated: `content/views.py` — `CategoryViewSet.articles` action
+
+- **Added `.distinct()`** — articles with multiple secondary categories were appearing multiple times due to Django JOIN multiplication on the many-to-many table. `.distinct()` removes the duplicate rows
+- **Replaced `self.get_object()` with `Category.objects.get(pk=pk)`** — DRF's `SearchFilter` was also filtering the category queryset used by `get_object()`, so passing `?search=somalia` to `/categories/7/articles/` caused a 404 because "somalia" isn't in "SR Originals" name/description. Direct model lookup bypasses filter backends entirely
+- **Fixed ordering** — `ordering_fields` check used `ordering in ordering_fields` which never matched `-published_at`, `-view_count`, `-like_count` (the `-` prefix was stripped by the check). Changed to `ordering.lstrip('-') in ordering_fields` so Popular and Liked sort tabs now work correctly instead of silently falling back to Latest
+
+---
+
 ## 2026-06-27 — Priority Filter on Articles Endpoint
 
 ### Updated: `content/views.py`

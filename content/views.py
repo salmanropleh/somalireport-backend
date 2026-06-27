@@ -200,13 +200,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
         from django_filters.rest_framework import DjangoFilterBackend
         from rest_framework import filters
         
-        category = self.get_object()
-        
+        try:
+            category = Category.objects.get(pk=pk)
+        except Category.DoesNotExist:
+            return Response({'detail': 'Not found.'}, status=404)
+
         # Base queryset - articles in this category (primary or secondary)
         articles = Article.objects.filter(
             Q(primary_category=category) | Q(secondary_categories=category),
             status='published'
-        ).select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories')
+        ).distinct().select_related('author', 'primary_category').prefetch_related('tags', 'secondary_categories')
         
         # Apply filters
         filterset_fields = ['tags', 'author', 'is_featured', 'is_breaking']
@@ -247,7 +250,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
         
         # Ordering
         ordering = request.GET.get('ordering', '-published_at')
-        if ordering in ordering_fields:
+        if ordering.lstrip('-') in ordering_fields:
             articles = articles.order_by(ordering)
         else:
             articles = articles.order_by('-published_at')
