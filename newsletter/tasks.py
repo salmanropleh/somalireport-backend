@@ -3,76 +3,151 @@ Celery tasks for newsletter app.
 """
 
 from celery import shared_task
-from django.core.mail import send_mail, EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.template.loader import render_to_string
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def send_newsletter_email(subscription, newsletter, base_url=None):
+def _get_recipients(newsletter):
     """
-    Helper function to send a newsletter email to a single subscriber.
+    Return list of (email, unsubscribe_token_or_None) tuples based on recipients_type.
+    """
+    from django.contrib.auth import get_user_model
+    from .models import NewsletterSubscription
 
-    Args:
-        subscription: NewsletterSubscription instance
-        newsletter: Newsletter instance
-        base_url: Optional base URL for building unsubscribe links
+    User = get_user_model()
+
+    if newsletter.recipients_type == 'subscribers':
+        subs = NewsletterSubscription.objects.filter(is_active=True, is_deleted=False)
+        return [(s.email, s.unsubscribe_token) for s in subs]
+
+    elif newsletter.recipients_type == 'all_users':
+        users = User.objects.filter(is_active=True).values_list('email', flat=True)
+        return [(email, None) for email in users if email]
+
+    elif newsletter.recipients_type == 'custom':
+        emails = [e.strip() for e in newsletter.custom_recipients.split(',') if e.strip()]
+        return [(email, None) for email in emails]
+
+    return []
+
+
+def _get_ordered_articles(newsletter):
+    """Return newsletter articles in admin-specified order."""
+    articles = list(newsletter.articles.filter(status='published'))
+    if newsletter.article_order:
+        order_map = {aid: idx for idx, aid in enumerate(newsletter.article_order)}
+        articles.sort(key=lambda a: order_map.get(a.id, 9999))
+    return articles
+
+
+def build_combined_content(articles, text_blocks):
+    """
+    Merge articles and text blocks into an ordered list for template rendering.
+    Text block position: 0 = before all articles, N = after Nth article.
+    """
+    blocks_by_pos = {}
+    for block in (text_blocks or []):
+        pos = block.get('position', 9999)
+        blocks_by_pos.setdefault(pos, []).append(block)
+
+    combined = []
+    for tb in blocks_by_pos.get(0, []):
+        combined.append({'type': 'text_block', 'data': tb})
+
+    for i, article in enumerate(articles):
+        combined.append({'type': 'article', 'data': article})
+        for tb in blocks_by_pos.get(i + 1, []):
+            combined.append({'type': 'text_block', 'data': tb})
+
+    for pos in sorted(blocks_by_pos):
+        if pos > len(articles):
+            for tb in blocks_by_pos[pos]:
+                combined.append({'type': 'text_block', 'data': tb})
+
+    return combined
+
+
+def send_campaign_email(email_address, newsletter, unsubscribe_token=None, is_test=False):
+    """
+    Send a single campaign email (newsletter or direct) to one address.
     """
     try:
-        # Build unsubscribe URL
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-        unsubscribe_url = f"{frontend_url}/unsubscribe?token={subscription.unsubscribe_token}"
+        social_links = getattr(settings, 'SOCIAL_LINKS', {})
 
-        # Prepare email content with unsubscribe link
-        html_content = f"""
-        {newsletter.content_html}
-        <br><br>
-        <hr>
-        <p style="color: #666; font-size: 12px;">
-            You are receiving this email because you subscribed to our newsletter.
-            <a href="{unsubscribe_url}">Unsubscribe</a>
-        </p>
-        """
+        if unsubscribe_token:
+            unsubscribe_url = f"{frontend_url}/unsubscribe?token={unsubscribe_token}"
+        else:
+            unsubscribe_url = f"{frontend_url}/unsubscribe"
 
-        text_content = f"""
-        {newsletter.content_text}
+        articles = _get_ordered_articles(newsletter) if newsletter.email_type == 'newsletter' else []
+        combined_content = build_combined_content(articles, newsletter.text_blocks) if newsletter.email_type == 'newsletter' else []
 
-        ---
-        You are receiving this email because you subscribed to our newsletter.
-        To unsubscribe, visit: {unsubscribe_url}
-        """
+        context = {
+            'newsletter': newsletter,
+            'articles': articles,
+            'combined_content': combined_content,
+            'frontend_url': frontend_url,
+            'unsubscribe_url': unsubscribe_url,
+            'recipient_email': email_address,
+            'social_links': social_links,
+            'send_date': timezone.now().strftime('%B %-d, %Y'),
+            'send_time': timezone.now().strftime('%I:%M %p UTC'),
+            'is_preview': False,
+            'is_test': is_test,
+        }
 
-        # Create email message
+        if newsletter.email_type == 'newsletter':
+            template_html = 'email/newsletter_template.html'
+            template_txt = 'email/newsletter_template_text.html'
+        else:
+            template_html = 'email/direct_email_template.html'
+            template_txt = 'email/direct_email_template_text.html'
+
+        html_content = render_to_string(template_html, context)
+        text_content = render_to_string(template_txt, context)
+
+        subject = f"[TEST] {newsletter.subject}" if is_test else newsletter.subject
+        from_email = f"Somali Report <{settings.EMAIL_HOST_USER}>" if settings.EMAIL_HOST_USER else settings.DEFAULT_FROM_EMAIL
+
         email = EmailMultiAlternatives(
-            subject=newsletter.subject,
+            subject=subject,
             body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[subscription.email]
+            from_email=from_email,
+            to=[email_address]
         )
         email.attach_alternative(html_content, "text/html")
-
-        # Send email
         email.send(fail_silently=False)
 
-        logger.info(f"Newsletter '{newsletter.title}' sent to {subscription.email}")
+        logger.info(f"Campaign '{newsletter.title}' sent to {email_address}")
         return True
 
     except Exception as e:
-        logger.error(f"Failed to send newsletter to {subscription.email}: {e}")
+        logger.error(f"Failed to send campaign to {email_address}: {e}")
         return False
+
+
+# Keep old name as alias so existing call-sites don't break
+def send_newsletter_email(subscription, newsletter, base_url=None):
+    """Legacy helper — wraps send_campaign_email for subscriber objects."""
+    return send_campaign_email(
+        subscription.email,
+        newsletter,
+        unsubscribe_token=subscription.unsubscribe_token
+    )
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_newsletter_task(self, newsletter_id):
     """
-    Celery task to send newsletter to all active subscribers.
-
-    Args:
-        newsletter_id: ID of the Newsletter to send
+    Celery task to send an email campaign to all configured recipients.
     """
-    from .models import Newsletter, NewsletterSubscription
+    from .models import Newsletter
 
     try:
         newsletter = Newsletter.objects.get(id=newsletter_id)
@@ -80,49 +155,38 @@ def send_newsletter_task(self, newsletter_id):
         logger.error(f"Newsletter with ID {newsletter_id} not found")
         return {'status': 'error', 'message': 'Newsletter not found'}
 
-    # Get all active subscribers
-    subscribers = NewsletterSubscription.objects.filter(
-        is_active=True,
-        is_deleted=False
-    )
-
-    total = subscribers.count()
+    recipients = _get_recipients(newsletter)
+    total = len(recipients)
     sent = 0
     failed = 0
 
-    logger.info(f"Starting to send newsletter '{newsletter.title}' to {total} subscribers")
+    logger.info(f"Sending campaign '{newsletter.title}' to {total} recipients")
 
-    for subscription in subscribers:
-        success = send_newsletter_email(subscription, newsletter)
+    for email_address, token in recipients:
+        success = send_campaign_email(email_address, newsletter, unsubscribe_token=token)
         if success:
             sent += 1
         else:
             failed += 1
 
-    # Update newsletter stats
     newsletter.recipient_count = sent
     newsletter.save(update_fields=['recipient_count'])
 
     result = {
         'status': 'completed',
         'newsletter_id': newsletter_id,
-        'total_subscribers': total,
+        'total': total,
         'sent': sent,
-        'failed': failed
+        'failed': failed,
     }
-
-    logger.info(f"Newsletter sending completed: {result}")
+    logger.info(f"Campaign sending completed: {result}")
     return result
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
 def send_test_newsletter_task(self, newsletter_id, test_email):
     """
-    Celery task to send a test newsletter to a single email.
-
-    Args:
-        newsletter_id: ID of the Newsletter to send
-        test_email: Email address to send the test to
+    Celery task to send a test campaign to a single email address.
     """
     from .models import Newsletter
 
@@ -133,50 +197,9 @@ def send_test_newsletter_task(self, newsletter_id, test_email):
         return {'status': 'error', 'message': 'Newsletter not found'}
 
     try:
-        # Build test email content
-        html_content = f"""
-        <div style="background: #fff3cd; padding: 10px; margin-bottom: 20px; border: 1px solid #ffc107; border-radius: 5px;">
-            <strong>TEST EMAIL</strong> - This is a test of the newsletter. It was not sent to subscribers.
-        </div>
-        {newsletter.content_html}
-        <br><br>
-        <hr>
-        <p style="color: #666; font-size: 12px;">
-            You are receiving this test email because you requested it.
-            [Unsubscribe link would appear here for real subscribers]
-        </p>
-        """
-
-        text_content = f"""
-        *** TEST EMAIL ***
-        This is a test of the newsletter. It was not sent to subscribers.
-
-        ---
-
-        {newsletter.content_text}
-
-        ---
-        You are receiving this test email because you requested it.
-        [Unsubscribe link would appear here for real subscribers]
-        """
-
-        # Create and send email
-        email = EmailMultiAlternatives(
-            subject=f"[TEST] {newsletter.subject}",
-            body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[test_email]
-        )
-        email.attach_alternative(html_content, "text/html")
-        email.send(fail_silently=False)
-
-        logger.info(f"Test newsletter '{newsletter.title}' sent to {test_email}")
-        return {
-            'status': 'success',
-            'newsletter_id': newsletter_id,
-            'test_email': test_email
-        }
-
+        send_campaign_email(test_email, newsletter, unsubscribe_token=None, is_test=True)
+        logger.info(f"Test campaign '{newsletter.title}' sent to {test_email}")
+        return {'status': 'success', 'newsletter_id': newsletter_id, 'test_email': test_email}
     except Exception as e:
-        logger.error(f"Failed to send test newsletter to {test_email}: {e}")
+        logger.error(f"Failed to send test campaign to {test_email}: {e}")
         raise self.retry(exc=e)

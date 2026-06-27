@@ -13,7 +13,7 @@ User = get_user_model()
 
 class Newsletter(AuditModel):
     """
-    Newsletter model for storing newsletter content.
+    Newsletter model for storing newsletter content and direct email campaigns.
     """
 
     STATUS_CHOICES = [
@@ -21,17 +21,55 @@ class Newsletter(AuditModel):
         ('sent', 'Sent'),
     ]
 
+    EMAIL_TYPE_CHOICES = [
+        ('newsletter', 'Newsletter'),
+        ('direct', 'Direct Email'),
+    ]
+
+    TEMPLATE_CHOICES = [
+        ('classic', 'Classic'),
+        ('modern', 'Modern'),
+        ('minimal', 'Minimal'),
+    ]
+
+    RECIPIENTS_CHOICES = [
+        ('subscribers', 'Subscribers'),
+        ('all_users', 'All Users'),
+        ('custom', 'Custom'),
+    ]
+
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True)
     subject = models.CharField(max_length=200, help_text="Email subject line")
     excerpt = models.TextField(max_length=500, blank=True)
-    content_html = models.TextField(help_text="HTML email content")
-    content_text = models.TextField(help_text="Plain text fallback")
+    content_html = models.TextField(blank=True, help_text="HTML email content (used for direct emails)")
+    content_text = models.TextField(blank=True, help_text="Plain text fallback")
     featured_image = models.ImageField(upload_to='newsletters/', blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     sent_at = models.DateTimeField(null=True, blank=True)
     recipient_count = models.PositiveIntegerField(default=0)
     open_count = models.PositiveIntegerField(default=0)
+
+    # Campaign type & targeting
+    email_type = models.CharField(max_length=20, choices=EMAIL_TYPE_CHOICES, default='newsletter')
+    recipients_type = models.CharField(max_length=20, choices=RECIPIENTS_CHOICES, default='subscribers')
+    custom_recipients = models.TextField(blank=True, help_text="Comma-separated email addresses")
+
+    # Newsletter-specific
+    articles = models.ManyToManyField(
+        'content.Article',
+        blank=True,
+        related_name='newsletters',
+        help_text="Articles to feature in newsletter campaigns"
+    )
+    article_order = models.JSONField(default=list, blank=True, help_text="Ordered list of article IDs")
+    greeting_text = models.CharField(max_length=255, blank=True, help_text="Optional greeting e.g. 'Dear Reader,'")
+
+    # Appearance
+    template_style = models.CharField(max_length=20, choices=TEMPLATE_CHOICES, default='classic')
+    accent_color = models.CharField(max_length=7, default='#1a3a6e', help_text="Hex color for branding")
+    header_image_url = models.URLField(blank=True, help_text="Full-width header image URL")
+    text_blocks = models.JSONField(default=list, blank=True, help_text="Custom text blocks: [{id, content, position}]")
 
     class Meta:
         db_table = 'newsletters'
@@ -43,9 +81,14 @@ class Newsletter(AuditModel):
         return self.title
 
     def save(self, *args, **kwargs):
-        """Auto-generate slug if not provided."""
         if not self.slug:
-            self.slug = StringHelper.slugify(self.title)
+            base_slug = StringHelper.slugify(self.title)
+            slug = base_slug
+            counter = 1
+            while Newsletter.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
         if not self.excerpt and self.content_text:
             self.excerpt = StringHelper.extract_excerpt(self.content_text, length=500)
         super().save(*args, **kwargs)

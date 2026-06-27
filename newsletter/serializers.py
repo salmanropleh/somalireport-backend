@@ -6,6 +6,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import Newsletter, NewsletterSubscription, NewsletterRead
+from content.models import Article
 
 User = get_user_model()
 
@@ -18,10 +19,8 @@ class NewsletterSubscribeSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        """Validate email and check for existing active subscription."""
         value = value.lower().strip()
 
-        # Check if already subscribed and active
         existing = NewsletterSubscription.objects.filter(
             email=value,
             is_active=True,
@@ -42,7 +41,6 @@ class NewsletterUnsubscribeSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=64)
 
     def validate_token(self, value):
-        """Validate unsubscribe token."""
         subscription = NewsletterSubscription.objects.filter(
             unsubscribe_token=value,
             is_active=True,
@@ -86,6 +84,52 @@ class NewsletterSubscriptionAdminSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'unsubscribe_token', 'created_at', 'updated_at']
 
 
+class ArticlePickerSerializer(serializers.Serializer):
+    """
+    Lightweight serializer for article picker in campaign composer.
+    """
+
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    slug = serializers.CharField()
+    excerpt = serializers.CharField()
+    featured_image_url = serializers.SerializerMethodField()
+    published_at = serializers.DateTimeField()
+
+    def get_featured_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.featured_image_url:
+            return obj.featured_image_url
+        if obj.featured_image:
+            if request:
+                return request.build_absolute_uri(obj.featured_image.url)
+            return obj.featured_image.url
+        return None
+
+
+class ArticleSummarySerializer(serializers.Serializer):
+    """
+    Nested article summary for newsletter detail views.
+    """
+
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    slug = serializers.CharField()
+    excerpt = serializers.CharField()
+    featured_image_url = serializers.SerializerMethodField()
+    published_at = serializers.DateTimeField()
+
+    def get_featured_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.featured_image_url:
+            return obj.featured_image_url
+        if obj.featured_image:
+            if request:
+                return request.build_absolute_uri(obj.featured_image.url)
+            return obj.featured_image.url
+        return None
+
+
 class NewsletterListSerializer(serializers.ModelSerializer):
     """
     Lightweight serializer for newsletter list view.
@@ -99,6 +143,8 @@ class NewsletterListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'slug', 'subject', 'excerpt',
             'featured_image', 'featured_image_url', 'status',
+            'email_type', 'template_style', 'recipients_type',
+            'header_image_url', 'text_blocks',
             'sent_at', 'recipient_count', 'open_count',
             'is_read', 'created_at'
         ]
@@ -108,12 +154,10 @@ class NewsletterListSerializer(serializers.ModelSerializer):
         ]
 
     def get_is_read(self, obj):
-        """Check if the current user has read this newsletter."""
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
 
-        # Get user's subscription
         try:
             subscription = NewsletterSubscription.objects.get(
                 user=request.user,
@@ -128,7 +172,6 @@ class NewsletterListSerializer(serializers.ModelSerializer):
             return None
 
     def get_featured_image_url(self, obj):
-        """Get featured image URL."""
         if obj.featured_image:
             request = self.context.get('request')
             if request:
@@ -145,6 +188,7 @@ class NewsletterDetailSerializer(serializers.ModelSerializer):
     is_read = serializers.SerializerMethodField()
     featured_image_url = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, allow_null=True)
+    articles_data = serializers.SerializerMethodField()
 
     class Meta:
         model = Newsletter
@@ -153,16 +197,20 @@ class NewsletterDetailSerializer(serializers.ModelSerializer):
             'content_html', 'content_text', 'featured_image',
             'featured_image_url', 'status', 'sent_at',
             'recipient_count', 'open_count', 'is_read',
+            'email_type', 'template_style', 'accent_color',
+            'greeting_text', 'recipients_type', 'custom_recipients',
+            'header_image_url', 'text_blocks',
+            'articles', 'article_order', 'articles_data',
             'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'slug', 'sent_at', 'recipient_count',
-            'open_count', 'created_by', 'created_at', 'updated_at'
+            'open_count', 'created_by', 'created_at', 'updated_at',
+            'articles_data'
         ]
 
     def get_is_read(self, obj):
-        """Check if the current user has read this newsletter."""
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
@@ -181,7 +229,6 @@ class NewsletterDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_featured_image_url(self, obj):
-        """Get featured image URL."""
         if obj.featured_image:
             request = self.context.get('request')
             if request:
@@ -189,51 +236,98 @@ class NewsletterDetailSerializer(serializers.ModelSerializer):
             return obj.featured_image.url
         return None
 
+    def get_articles_data(self, obj):
+        """Return articles in the order specified by article_order."""
+        articles = list(obj.articles.all())
+        if obj.article_order:
+            order_map = {aid: idx for idx, aid in enumerate(obj.article_order)}
+            articles.sort(key=lambda a: order_map.get(a.id, 9999))
+        serializer = ArticleSummarySerializer(articles, many=True, context=self.context)
+        return serializer.data
+
 
 class NewsletterCreateUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating and updating newsletters.
+    Serializer for creating and updating newsletters / email campaigns.
     """
+
+    articles = serializers.PrimaryKeyRelatedField(
+        many=True,
+        read_only=False,
+        required=False,
+        queryset=Article.objects.filter(status='published', is_deleted=False)
+    )
+    header_image_url = serializers.URLField(required=False, allow_blank=True, allow_null=True)
+    text_blocks = serializers.JSONField(required=False, default=list)
 
     class Meta:
         model = Newsletter
         fields = [
-            'title', 'subject', 'excerpt', 'content_html',
-            'content_text', 'featured_image', 'status'
+            'id', 'title', 'subject', 'excerpt', 'content_html',
+            'content_text', 'featured_image', 'status',
+            'email_type', 'template_style', 'accent_color',
+            'greeting_text', 'recipients_type', 'custom_recipients',
+            'header_image_url', 'text_blocks',
+            'articles', 'article_order',
         ]
+        read_only_fields = ['id']
 
     def validate_title(self, value):
-        """Validate newsletter title."""
         if len(value) < 5:
             raise serializers.ValidationError("Title must be at least 5 characters long.")
         return value
 
     def validate_subject(self, value):
-        """Validate email subject."""
         if len(value) < 5:
             raise serializers.ValidationError("Subject must be at least 5 characters long.")
         return value
 
-    def validate_content_html(self, value):
-        """Validate HTML content."""
-        if len(value) < 50:
-            raise serializers.ValidationError("HTML content must be at least 50 characters long.")
-        return value
-
-    def validate_content_text(self, value):
-        """Validate text content."""
-        if len(value) < 20:
-            raise serializers.ValidationError("Text content must be at least 20 characters long.")
-        return value
-
     def validate(self, data):
-        """Validate the newsletter data."""
-        # Cannot change status to 'sent' directly via this serializer
         if data.get('status') == 'sent':
             raise serializers.ValidationError({
                 'status': "Cannot set status to 'sent' directly. Use the send endpoint."
             })
+
+        email_type = data.get('email_type', 'newsletter')
+
+        # Direct emails require body content
+        if email_type == 'direct':
+            content_html = data.get('content_html', '')
+            if not content_html or len(content_html) < 20:
+                raise serializers.ValidationError({
+                    'content_html': "Direct emails require HTML content (at least 20 characters)."
+                })
+
+        # Custom recipients require addresses
+        if data.get('recipients_type') == 'custom':
+            if not data.get('custom_recipients', '').strip():
+                raise serializers.ValidationError({
+                    'custom_recipients': "Please provide at least one email address for custom recipients."
+                })
+
         return data
+
+    def create(self, validated_data):
+        articles = validated_data.pop('articles', [])
+        if validated_data.get('header_image_url') is None:
+            validated_data['header_image_url'] = ''
+        if validated_data.get('text_blocks') is None:
+            validated_data['text_blocks'] = []
+        instance = super().create(validated_data)
+        if articles:
+            instance.articles.set(articles)
+        return instance
+
+    def update(self, instance, validated_data):
+        articles = validated_data.pop('articles', None)
+        if validated_data.get('header_image_url') is None:
+            validated_data['header_image_url'] = ''
+        if validated_data.get('text_blocks') is None:
+            validated_data['text_blocks'] = []
+        instance = super().update(instance, validated_data)
+        if articles is not None:
+            instance.articles.set(articles)
+        return instance
 
 
 class NewsletterSendSerializer(serializers.Serializer):
@@ -244,7 +338,6 @@ class NewsletterSendSerializer(serializers.Serializer):
     test_email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
 
     def validate_test_email(self, value):
-        """Validate optional test email."""
         if value:
             return value.lower().strip()
         return value
