@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-06-27 — Priority Filter on Articles Endpoint
+
+### Updated: `content/views.py`
+- **Added `priority` to `filterset_fields`** on `ArticleViewSet` — enables `?priority=high|urgent|normal|low` filtering directly via the API
+- Previously `priority` was silently ignored as a query param; the frontend had to fetch 40 recent articles and filter client-side, causing the Trending section to show fewer than 8 articles when high-priority articles weren't among the most recently published
+- **No migration needed** — `priority` is an existing model field; this only enables filtering on it
+
+---
+
 ## 2026-06-25 — AVIF Upload Validation
 
 ### Updated: `content/serializers.py`
