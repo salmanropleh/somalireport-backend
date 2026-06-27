@@ -23,6 +23,8 @@ from .serializers import (
     NewsletterCreateUpdateSerializer,
     NewsletterSendSerializer,
     ArticlePickerSerializer,
+    NewsletterPublicListSerializer,
+    NewsletterPublicDetailSerializer,
 )
 from core.utils import APIResponse
 import logging
@@ -676,3 +678,25 @@ def public_unsubscribe(request):
     subscription.save()
 
     return APIResponse.success(message="Successfully unsubscribed from the newsletter.")
+
+
+class NewsletterPublicViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public read-only access to sent newsletter editions — no authentication required.
+
+    GET /newsletters/public/       → paginated list of sent editions
+    GET /newsletters/public/{id}/  → full edition with content_html
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        return Newsletter.objects.filter(
+            status='sent',
+            is_deleted=False
+        ).order_by('-sent_at')
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return NewsletterPublicDetailSerializer
+        return NewsletterPublicListSerializer
