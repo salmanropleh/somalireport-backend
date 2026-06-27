@@ -22,6 +22,8 @@ from .serializers import (
     NewsletterDetailSerializer,
     NewsletterCreateUpdateSerializer,
     NewsletterSendSerializer,
+    NewsletterPublicListSerializer,
+    NewsletterPublicDetailSerializer,
 )
 from core.utils import APIResponse
 import logging
@@ -441,3 +443,25 @@ class NewsletterViewSet(viewsets.ModelViewSet):
             data=serializer.data,
             message=f"Retrieved {len(serializer.data)} subscribers."
         )
+
+
+class NewsletterPublicViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public read-only access to sent newsletter editions — no authentication required.
+
+    GET /newsletters/public/       → paginated list of sent editions
+    GET /newsletters/public/{id}/  → full edition with content_html
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        return Newsletter.objects.filter(
+            status='sent',
+            is_deleted=False
+        ).order_by('-sent_at')
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return NewsletterPublicDetailSerializer
+        return NewsletterPublicListSerializer

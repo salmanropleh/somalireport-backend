@@ -248,3 +248,43 @@ class NewsletterSendSerializer(serializers.Serializer):
         if value:
             return value.lower().strip()
         return value
+
+
+class NewsletterPublicListSerializer(serializers.ModelSerializer):
+    """
+    Public serializer for newsletter archive listing — no auth fields.
+    """
+
+    featured_image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Newsletter
+        fields = ['id', 'title', 'slug', 'subject', 'excerpt', 'featured_image_url', 'sent_at']
+
+    def get_featured_image_url(self, obj):
+        if obj.featured_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.featured_image.url)
+            return obj.featured_image.url
+        return None
+
+
+class NewsletterPublicDetailSerializer(serializers.ModelSerializer):
+    """
+    Public serializer for a single newsletter edition — includes content_html.
+    """
+
+    featured_image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Newsletter
+        fields = ['id', 'title', 'slug', 'subject', 'excerpt', 'content_html', 'featured_image_url', 'sent_at']
+
+    def get_featured_image_url(self, obj):
+        if obj.featured_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.featured_image.url)
+            return obj.featured_image.url
+        return None
