@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-06-28 — Newsletter Public Archive Endpoints
+
+### Updated: `newsletter/serializers.py`
+- **Added `NewsletterPublicListSerializer`** — exposes `id`, `title`, `slug`, `subject`, `excerpt`, `featured_image_url`, `sent_at`; no auth-dependent fields
+- **Added `NewsletterPublicDetailSerializer`** — same fields plus `content_html` for full edition rendering
+
+### Updated: `newsletter/views.py`
+- **Added `NewsletterPublicViewSet`** — `ReadOnlyModelViewSet` with `AllowAny` permission; queryset filters to `status='sent'` and `is_deleted=False`, ordered by `-sent_at`
+- Added `NewsletterPublicListSerializer` and `NewsletterPublicDetailSerializer` to imports
+
+### Updated: `newsletter/urls.py`
+- Imported `NewsletterPublicViewSet`
+- Registered `newsletters/public` prefix **before** `newsletters` so the router's detail pattern for `newsletters/{pk}/` doesn't intercept requests to `newsletters/public/`
+- Final endpoints: `GET /api/v1/newsletters/public/` (list) and `GET /api/v1/newsletters/public/{id}/` (detail) — no authentication required
+
+### Note
+These additions were made on top of the campaign composer codebase (built directly on the server by another developer and committed 2026-06-28). The merge was done by reverting our earlier attempt, committing the server's local changes, pushing them, then reapplying our additions cleanly.
+
+---
+
 ## 2026-06-27 — Category Articles: Duplicates, Search 404, Ordering
 
 ### Updated: `content/views.py` — `CategoryViewSet.articles` action
