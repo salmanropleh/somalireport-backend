@@ -226,6 +226,12 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = env('EMAIL_HOST_USER', default='noreply@somalireport.com')
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
+SOCIAL_LINKS = {
+    'twitter': env('SOCIAL_TWITTER_URL', default='https://twitter.com/somalireport'),
+    'instagram': env('SOCIAL_INSTAGRAM_URL', default='https://instagram.com/somalireport'),
+    'linkedin': env('SOCIAL_LINKEDIN_URL', default='https://linkedin.com/company/somalireport'),
+    'youtube': env('SOCIAL_YOUTUBE_URL', default='https://youtube.com/@somalireport'),
+}
 
 # Logging Configuration
 LOGGING = {

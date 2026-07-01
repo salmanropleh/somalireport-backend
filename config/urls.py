@@ -27,7 +27,7 @@ urlpatterns = [
     path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
 
     # Admin
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
 
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
