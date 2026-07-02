@@ -160,6 +160,29 @@ def send_newsletter_task(self, newsletter_id):
     sent = 0
     failed = 0
 
+    # Save the rendered HTML to content_html so the web archive reader can display it
+    if newsletter.email_type == 'newsletter':
+        from django.template.loader import render_to_string
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        social_links = getattr(settings, 'SOCIAL_LINKS', {})
+        articles = _get_ordered_articles(newsletter)
+        combined_content = build_combined_content(articles, newsletter.text_blocks)
+        context = {
+            'newsletter': newsletter,
+            'articles': articles,
+            'combined_content': combined_content,
+            'frontend_url': frontend_url,
+            'unsubscribe_url': f"{frontend_url}/unsubscribe",
+            'recipient_email': '',
+            'social_links': social_links,
+            'send_date': timezone.now().strftime('%B %-d, %Y'),
+            'send_time': timezone.now().strftime('%I:%M %p UTC'),
+            'is_preview': False,
+            'is_test': False,
+        }
+        newsletter.content_html = render_to_string('email/newsletter_template.html', context)
+        newsletter.save(update_fields=['content_html'])
+
     logger.info(f"Sending campaign '{newsletter.title}' to {total} recipients")
 
     for email_address, token in recipients:

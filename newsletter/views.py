@@ -689,6 +689,7 @@ class NewsletterPublicViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
 
     def get_queryset(self):
         return Newsletter.objects.filter(
