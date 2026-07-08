@@ -45,6 +45,17 @@ def _get_ordered_articles(newsletter):
     return articles
 
 
+def _text_to_html(text):
+    """Convert plain text with blank-line paragraph breaks into inline-styled HTML paragraphs."""
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    parts = []
+    for i, para in enumerate(paragraphs):
+        margin = '0 0 14px 0' if i < len(paragraphs) - 1 else '0'
+        para = para.replace('\n', '<br>')
+        parts.append(f'<p style="margin:{margin};font-family:Georgia,\'Times New Roman\',serif;font-size:15px;line-height:1.8;color:#333333;">{para}</p>')
+    return ''.join(parts)
+
+
 def build_combined_content(articles, text_blocks):
     """
     Merge articles and text blocks into an ordered list for template rendering.
@@ -55,19 +66,24 @@ def build_combined_content(articles, text_blocks):
         pos = block.get('position', 9999)
         blocks_by_pos.setdefault(pos, []).append(block)
 
+    def make_text_block(tb):
+        data = dict(tb)
+        data['content_html'] = _text_to_html(tb.get('content', ''))
+        return {'type': 'text_block', 'data': data}
+
     combined = []
     for tb in blocks_by_pos.get(0, []):
-        combined.append({'type': 'text_block', 'data': tb})
+        combined.append(make_text_block(tb))
 
     for i, article in enumerate(articles):
         combined.append({'type': 'article', 'data': article})
         for tb in blocks_by_pos.get(i + 1, []):
-            combined.append({'type': 'text_block', 'data': tb})
+            combined.append(make_text_block(tb))
 
     for pos in sorted(blocks_by_pos):
         if pos > len(articles):
             for tb in blocks_by_pos[pos]:
-                combined.append({'type': 'text_block', 'data': tb})
+                combined.append(make_text_block(tb))
 
     return combined
 

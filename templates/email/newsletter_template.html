@@ -92,8 +92,8 @@
             <!-- ── TEXT BLOCK ── -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
-                <td style="padding:20px 24px;background-color:#f9f7f4;border-left:4px solid {{ newsletter.accent_color }};font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.8;color:#333333;">
-                  {{ item.data.content|safe }}
+                <td style="padding:20px 24px;background-color:#f9f7f4;border-left:4px solid {{ newsletter.accent_color }};">
+                  {{ item.data.content_html|safe }}
                 </td>
               </tr>
             </table>
