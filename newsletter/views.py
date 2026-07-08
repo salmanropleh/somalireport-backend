@@ -381,7 +381,7 @@ class NewsletterViewSet(viewsets.ModelViewSet):
                 newsletter.status = 'sent'
                 newsletter.sent_at = timezone.now()
                 newsletter.recipient_count = recipient_count
-                newsletter.save()
+                newsletter.save(update_fields=['status', 'sent_at', 'recipient_count'])
 
                 return APIResponse.success(
                     data={
