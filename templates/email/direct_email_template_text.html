@@ -1,0 +1,11 @@
+{% if is_test %}*** TEST EMAIL — Not sent to recipients ***
+
+{% endif %}SOMALI REPORT
+{{ newsletter.subject }}
+---
+{{ newsletter.content_text }}
+
+---
+This message was sent by Somali Report.
+{% if not is_preview %}Unsubscribe: {{ unsubscribe_url }}
+Visit us: {{ frontend_url }}{% endif %}

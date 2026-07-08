@@ -1,0 +1,22 @@
+{% if is_test %}*** TEST EMAIL — Not sent to subscribers ***
+
+{% endif %}SOMALI REPORT
+{{ newsletter.title }}
+{% if newsletter.excerpt %}
+{{ newsletter.excerpt }}
+{% endif %}
+---
+{% if newsletter.greeting_text %}{{ newsletter.greeting_text }}
+
+{% endif %}{% if articles %}IN THIS ISSUE
+{% for article in articles %}
+{{ forloop.counter }}. {{ article.title }}
+{% if article.excerpt %}{{ article.excerpt|truncatewords:25 }}{% endif %}
+Read more: {{ frontend_url }}/article/{{ article.slug }}
+
+{% endfor %}{% else %}Stay tuned — great stories are coming soon.
+{% endif %}
+---
+You are receiving this because you subscribed to Somali Report newsletters.
+{% if not is_preview %}Unsubscribe: {{ unsubscribe_url }}
+Visit us: {{ frontend_url }}{% endif %}

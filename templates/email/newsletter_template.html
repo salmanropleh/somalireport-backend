@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ newsletter.subject }}</title>
+<style>
+  img { max-width: 100% !important; height: auto !important; }
+  table { max-width: 100% !important; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f0f0;font-family:Georgia,'Times New Roman',serif;">
+
+{% if is_test %}
+<div style="background:#fff3cd;padding:12px 24px;text-align:center;border-bottom:2px solid #ffc107;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;color:#856404;">
+  TEST EMAIL — This preview was not sent to subscribers.
+</div>
+{% endif %}
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f0f0;padding:28px 0 0 0;">
+  <tr>
+    <td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;">
+
+        <!-- ═══ MASTHEAD: Logo + Tagline ═══ -->
+        <tr>
+          <td style="background-color:#ffffff;padding:24px 40px 16px 40px;text-align:center;border-bottom:3px solid {{ newsletter.accent_color }};">
+            <a href="{{ frontend_url }}" style="display:inline-block;text-decoration:none;">
+              <img src="{{ frontend_url }}/logo-dark.png"
+                   alt="Somali Report"
+                   width="160"
+                   style="width:160px;max-width:160px;height:auto;display:block;margin:0 auto 8px auto;border:0;">
+            </a>
+            <p style="margin:0;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#888888;font-weight:500;">
+              Independent &nbsp;·&nbsp; Factual &nbsp;·&nbsp; In-Depth
+            </p>
+          </td>
+        </tr>
+
+        <!-- ═══ HEADER IMAGE (if provided) ═══ -->
+        {% if newsletter.header_image_url %}
+        <tr>
+          <td style="padding:0;line-height:0;font-size:0;">
+            <img src="{{ newsletter.header_image_url }}"
+                 alt="{{ newsletter.title }}"
+                 width="600"
+                 style="width:100%;max-width:600px;height:240px;object-fit:cover;display:block;border:0;">
+          </td>
+        </tr>
+        {% endif %}
+
+        <!-- ═══ DATE BAR ═══ -->
+        <tr>
+          <td style="background-color:{{ newsletter.accent_color }};padding:9px 40px;text-align:center;">
+            <span style="color:#ffffff;font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">
+              {% if newsletter.sent_at %}{{ newsletter.sent_at|date:"F j, Y · g:i A" }} UTC{% else %}{{ send_date }} · {{ send_time }}{% endif %}
+            </span>
+          </td>
+        </tr>
+
+        <!-- ═══ TITLE + GREETING ═══ -->
+        <tr>
+          <td style="padding:32px 40px 24px 40px;border-bottom:1px solid #eeeeee;">
+            {% if newsletter.greeting_text %}
+            <p style="margin:0 0 14px 0;color:#666666;font-size:16px;font-style:italic;font-family:Georgia,'Times New Roman',serif;">
+              {{ newsletter.greeting_text }}
+            </p>
+            {% endif %}
+            <h2 style="margin:0 0 12px 0;color:#111111;font-size:24px;line-height:1.3;font-family:Georgia,'Times New Roman',serif;">
+              {{ newsletter.title }}
+            </h2>
+            {% if newsletter.excerpt %}
+            <p style="margin:0;color:#555555;font-size:15px;line-height:1.7;font-family:Arial,sans-serif;">
+              {{ newsletter.excerpt }}
+            </p>
+            {% endif %}
+          </td>
+        </tr>
+
+        <!-- ═══ COMBINED CONTENT (articles + text blocks) ═══ -->
+        {% if combined_content %}
+        <tr>
+          <td style="padding:32px 40px 8px 40px;">
+            <p style="margin:0 0 28px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;font-family:Arial,sans-serif;border-bottom:1px solid #eeeeee;padding-bottom:12px;">
+              In This Newsletter
+            </p>
+
+            {% for item in combined_content %}
+
+            {% if item.type == 'text_block' %}
+            <!-- ── TEXT BLOCK ── -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="padding:20px 24px;background-color:#f9f7f4;border-left:4px solid {{ newsletter.accent_color }};font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.8;color:#333333;">
+                  {{ item.data.content|safe }}
+                </td>
+              </tr>
+            </table>
+
+            {% elif item.type == 'article' %}
+            <!-- ── ARTICLE CARD ── -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border-bottom:1px solid #f0f0f0;padding-bottom:28px;">
+              <tr>
+                {% if item.data.featured_image_url or item.data.featured_image %}
+                <td width="130" valign="top" style="padding-right:20px;padding-bottom:0;">
+                  <a href="{{ frontend_url }}/article/{{ item.data.id }}/{{ item.data.slug }}" style="display:block;text-decoration:none;">
+                    <img
+                      src="{% if item.data.featured_image_url %}{{ item.data.featured_image_url }}{% elif item.data.featured_image %}{{ item.data.featured_image.url }}{% endif %}"
+                      alt="{{ item.data.title }}"
+                      width="130"
+                      style="width:130px;height:88px;object-fit:cover;display:block;border:0;">
+                  </a>
+                </td>
+                {% endif %}
+                <td valign="top">
+                  <p style="margin:0 0 5px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;font-family:Arial,sans-serif;">
+                    {{ item.data.primary_category|default:"News" }}
+                  </p>
+                  <h3 style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
+                    <a href="{{ frontend_url }}/article/{{ item.data.id }}/{{ item.data.slug }}" style="color:#111111;text-decoration:none;">
+                      {{ item.data.title }}
+                    </a>
+                  </h3>
+                  {% if item.data.excerpt %}
+                  <p style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
+                    {{ item.data.excerpt|truncatewords:25 }}
+                  </p>
+                  {% endif %}
+                  <a href="{{ frontend_url }}/article/{{ item.data.id }}/{{ item.data.slug }}"
+                     style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;letter-spacing:0.5px;">
+                    READ MORE →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            {% endif %}
+
+            {% endfor %}
+          </td>
+        </tr>
+
+        {% elif articles %}
+        <tr>
+          <td style="padding:32px 40px 8px 40px;">
+            <p style="margin:0 0 28px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;font-family:Arial,sans-serif;border-bottom:1px solid #eeeeee;padding-bottom:12px;">
+              In This Newsletter
+            </p>
+            {% for article in articles %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;{% if not forloop.last %}border-bottom:1px solid #f0f0f0;padding-bottom:28px;{% endif %}">
+              <tr>
+                {% if article.featured_image_url or article.featured_image %}
+                <td width="130" valign="top" style="padding-right:20px;">
+                  <a href="{{ frontend_url }}/article/{{ article.id }}/{{ article.slug }}" style="display:block;">
+                    <img src="{% if article.featured_image_url %}{{ article.featured_image_url }}{% elif article.featured_image %}{{ article.featured_image.url }}{% endif %}"
+                         alt="{{ article.title }}" width="130"
+                         style="width:130px;height:88px;object-fit:cover;display:block;border:0;">
+                  </a>
+                </td>
+                {% endif %}
+                <td valign="top">
+                  <h3 style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
+                    <a href="{{ frontend_url }}/article/{{ article.id }}/{{ article.slug }}" style="color:#111111;text-decoration:none;">{{ article.title }}</a>
+                  </h3>
+                  {% if article.excerpt %}
+                  <p style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
+                    {{ article.excerpt|truncatewords:25 }}
+                  </p>
+                  {% endif %}
+                  <a href="{{ frontend_url }}/article/{{ article.id }}/{{ article.slug }}"
+                     style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;">
+                    READ MORE →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            {% endfor %}
+          </td>
+        </tr>
+
+        {% else %}
+        <tr>
+          <td style="padding:48px 40px;text-align:center;color:#999999;font-family:Arial,sans-serif;font-size:15px;">
+            Stay tuned — great stories are coming soon.
+          </td>
+        </tr>
+        {% endif %}
+
+        <!-- ═══ VISIT SITE CTA ═══ -->
+        <tr>
+          <td style="padding:8px 40px 36px 40px;text-align:center;">
+            <a href="{{ frontend_url }}"
+               style="display:inline-block;padding:12px 32px;background-color:{{ newsletter.accent_color }};color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-decoration:none;letter-spacing:1px;text-transform:uppercase;">
+              Visit Somali Report
+            </a>
+          </td>
+        </tr>
+
+        <!-- ═══ DARK FOOTER ═══ -->
+        <tr>
+          <td style="background-color:#0f0f0f;padding:40px 40px 36px 40px;text-align:center;">
+
+            <!-- Logo in footer -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+              <tr>
+                <td align="center">
+                  <img src="{{ frontend_url }}/logo-white.png"
+                       alt="Somali Report"
+                       width="120"
+                       style="width:120px;max-width:120px;height:auto;display:block;margin:0 auto;border:0;opacity:0.85;">
+                </td>
+              </tr>
+            </table>
+
+            <!-- Social Icons -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="center" style="padding-bottom:28px;">
+                  {% if social_links.twitter %}
+                  <a href="{{ social_links.twitter }}"
+                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">
+                    𝕏
+                  </a>
+                  {% endif %}
+                  {% if social_links.instagram %}
+                  <a href="{{ social_links.instagram }}"
+                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:bold;">
+                    IG
+                  </a>
+                  {% endif %}
+                  {% if social_links.linkedin %}
+                  <a href="{{ social_links.linkedin }}"
+                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">
+                    in
+                  </a>
+                  {% endif %}
+                  {% if social_links.youtube %}
+                  <a href="{{ social_links.youtube }}"
+                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;">
+                    ▶
+                  </a>
+                  {% endif %}
+                </td>
+              </tr>
+            </table>
+
+            <!-- Divider -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <tr><td style="border-top:1px solid #2a2a2a;font-size:0;line-height:0;">&nbsp;</td></tr>
+            </table>
+
+            <!-- Copyright -->
+            <p style="margin:0 0 12px 0;color:#aaaaaa;font-family:Arial,sans-serif;font-size:12px;">
+              &copy; {{ current_year }} Somali Report &nbsp;|&nbsp; All rights reserved
+            </p>
+
+            <!-- Safe list note -->
+            <p style="margin:0 0 12px 0;color:#777777;font-family:Arial,sans-serif;font-size:11px;line-height:1.6;">
+              To ensure you receive our emails, please add
+              <span style="color:#aaaaaa;">noreply@somalireport.com</span>
+              to your address book or safe list.
+            </p>
+
+            <!-- Sent to -->
+            {% if recipient_email %}
+            <p style="margin:0 0 20px 0;color:#666666;font-family:Arial,sans-serif;font-size:11px;">
+              This email was sent to
+              <a href="mailto:{{ recipient_email }}" style="color:#888888;text-decoration:underline;">{{ recipient_email }}</a>
+            </p>
+            {% endif %}
+
+            <!-- Unsubscribe -->
+            {% if not is_preview %}
+            <p style="margin:0;color:#555555;font-family:Arial,sans-serif;font-size:11px;line-height:1.6;">
+              Receiving too many emails? &nbsp;
+              <a href="{{ unsubscribe_url }}" style="color:{{ newsletter.accent_color }};text-decoration:underline;">Unsubscribe</a>
+              &nbsp;and manage your email preferences.
+            </p>
+            {% endif %}
+
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

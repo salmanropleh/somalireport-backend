@@ -184,3 +184,4 @@ config/settings/development.py
 config/settings/production.py
 google-sa-key.json
 *-sa-key.json
+db_import.sqlite3
