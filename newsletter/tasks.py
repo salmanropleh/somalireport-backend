@@ -46,13 +46,48 @@ def _get_ordered_articles(newsletter):
 
 
 def _text_to_html(text):
-    """Convert plain text with blank-line paragraph breaks into inline-styled HTML paragraphs."""
-    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    """
+    Convert content to inline-styled HTML for email rendering.
+    If the input already contains HTML tags (from Quill), apply inline styles to block elements.
+    Otherwise treat as plain text and wrap paragraphs.
+    """
+    import re
+
+    stripped = text.strip()
+    if not stripped:
+        return ''
+
+    # Detect HTML input (Quill outputs HTML)
+    if re.search(r'<(p|h[1-6]|ul|ol|li|br|strong|em|a)\b', stripped, re.IGNORECASE):
+        # Apply inline styles to headings
+        styled = stripped
+        heading_styles = {
+            'h1': 'margin:0 0 16px 0;font-family:Georgia,"Times New Roman",serif;font-size:26px;line-height:1.3;color:#111111;font-weight:bold;',
+            'h2': 'margin:0 0 14px 0;font-family:Georgia,"Times New Roman",serif;font-size:22px;line-height:1.3;color:#111111;font-weight:bold;',
+            'h3': 'margin:0 0 12px 0;font-family:Georgia,"Times New Roman",serif;font-size:18px;line-height:1.35;color:#111111;font-weight:bold;',
+            'h4': 'margin:0 0 10px 0;font-family:Arial,sans-serif;font-size:15px;line-height:1.4;color:#111111;font-weight:bold;',
+        }
+        for tag, style in heading_styles.items():
+            styled = re.sub(
+                rf'<{tag}(\s[^>]*)?>',
+                lambda m, t=tag, s=style: f'<{t} style="{s}">',
+                styled, flags=re.IGNORECASE
+            )
+        # Style paragraphs (add margin if no existing style)
+        styled = re.sub(
+            r'<p(?!\s+style=)(\s[^>]*)?>',
+            r'<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#333333;">',
+            styled, flags=re.IGNORECASE
+        )
+        return styled
+
+    # Plain text fallback
+    paragraphs = [p.strip() for p in stripped.split('\n\n') if p.strip()]
     parts = []
     for i, para in enumerate(paragraphs):
         margin = '0 0 14px 0' if i < len(paragraphs) - 1 else '0'
         para = para.replace('\n', '<br>')
-        parts.append(f'<p style="margin:{margin};font-family:Georgia,\'Times New Roman\',serif;font-size:15px;line-height:1.8;color:#333333;">{para}</p>')
+        parts.append(f'<p style="margin:{margin};font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#333333;">{para}</p>')
     return ''.join(parts)
 
 
