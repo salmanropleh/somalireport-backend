@@ -188,9 +188,9 @@
 
         <!-- ═══ VISIT SITE CTA ═══ -->
         <tr>
-          <td style="padding:8px 40px 36px 40px;text-align:center;">
+          <td style="padding:8px 40px 36px 40px;text-align:center;border-bottom:3px solid {{ newsletter.accent_color }};">
             <a href="{{ frontend_url }}"
-               style="display:inline-block;padding:12px 32px;background-color:{{ newsletter.accent_color }};color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-decoration:none;letter-spacing:1px;text-transform:uppercase;">
+               style="display:inline-block;padding:12px 32px;background-color:#1a3a6e;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-decoration:none;letter-spacing:1px;text-transform:uppercase;">
               Visit Somali Report
             </a>
           </td>
@@ -198,85 +198,83 @@
 
         <!-- ═══ DARK FOOTER ═══ -->
         <tr>
-          <td style="background-color:#0f0f0f;padding:40px 40px 36px 40px;text-align:center;">
+          <td style="background-color:#0a0a0a;padding:0;">
 
-            <!-- Logo in footer -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-              <tr>
-                <td align="center">
-                  <img src="{{ frontend_url }}/logo-white.png"
-                       alt="Somali Report"
-                       width="120"
-                       style="width:120px;max-width:120px;height:auto;display:block;margin:0 auto;border:0;opacity:0.85;">
-                </td>
-              </tr>
-            </table>
-
-            <!-- Social Icons -->
+            <!-- Branding + social icons row -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td align="center" style="padding-bottom:28px;">
-                  {% if social_links.twitter %}
-                  <a href="{{ social_links.twitter }}"
-                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">
-                    𝕏
-                  </a>
-                  {% endif %}
-                  {% if social_links.instagram %}
-                  <a href="{{ social_links.instagram }}"
-                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:bold;">
-                    IG
-                  </a>
-                  {% endif %}
-                  {% if social_links.linkedin %}
-                  <a href="{{ social_links.linkedin }}"
-                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">
-                    in
-                  </a>
-                  {% endif %}
-                  {% if social_links.youtube %}
-                  <a href="{{ social_links.youtube }}"
-                     style="display:inline-block;margin:0 6px;width:38px;height:38px;border-radius:50%;background:#222222;border:1px solid #444444;text-align:center;line-height:38px;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;">
-                    ▶
-                  </a>
-                  {% endif %}
+                <td style="padding:28px 32px 0 32px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <!-- Left: SR monogram + name -->
+                      <td valign="middle">
+                        <table cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td valign="middle" style="padding-right:10px;" width="42">
+                              <div style="width:36px;height:36px;border-radius:50%;background:#1a3a6e;text-align:center;line-height:36px;color:#C9A84C;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;">SR</div>
+                            </td>
+                            <td valign="middle">
+                              <div style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;line-height:1.2;">Somali<span style="color:#C9A84C;">Report</span></div>
+                              <div style="color:#7a7a7a;font-family:Arial,Helvetica,sans-serif;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;margin-top:3px;">Independent &middot; Factual &middot; In-depth</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                      <!-- Right: social icons -->
+                      <td align="right" valign="middle">
+                        {% if social_links.twitter %}
+                        <a href="{{ social_links.twitter }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;">𝕏</a>
+                        {% endif %}
+                        {% if social_links.instagram %}
+                        <a href="{{ social_links.instagram }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:9px;font-weight:bold;">IG</a>
+                        {% endif %}
+                        {% if social_links.linkedin %}
+                        <a href="{{ social_links.linkedin }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:9px;font-weight:bold;">in</a>
+                        {% endif %}
+                        {% if social_links.youtube %}
+                        <a href="{{ social_links.youtube }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#C9A84C;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;">&#9658;</a>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
             </table>
 
             <!-- Divider -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-              <tr><td style="border-top:1px solid #2a2a2a;font-size:0;line-height:0;">&nbsp;</td></tr>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;">
+              <tr><td style="border-top:1px solid #202020;font-size:0;line-height:0;">&nbsp;</td></tr>
             </table>
 
-            <!-- Copyright -->
-            <p style="margin:0 0 12px 0;color:#aaaaaa;font-family:Arial,sans-serif;font-size:12px;">
-              &copy; {{ current_year }} Somali Report &nbsp;|&nbsp; All rights reserved
-            </p>
+            <!-- Safe list note + sent to -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding:20px 32px 0 32px;">
+                  <p style="margin:0 0 8px 0;color:#8f8f8f;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;">
+                    To ensure you receive our emails, please add <a href="mailto:noreply@somalireport.com" style="color:{{ newsletter.accent_color }};text-decoration:none;">noreply@somalireport.com</a> to your address book or safe list.
+                  </p>
+                  {% if recipient_email %}
+                  <p style="margin:0;color:#666666;font-family:Arial,Helvetica,sans-serif;font-size:11px;">
+                    This email was sent to <a href="mailto:{{ recipient_email }}" style="color:#8f8f8f;text-decoration:underline;">{{ recipient_email }}</a>
+                  </p>
+                  {% endif %}
+                </td>
+              </tr>
+            </table>
 
-            <!-- Safe list note -->
-            <p style="margin:0 0 12px 0;color:#777777;font-family:Arial,sans-serif;font-size:11px;line-height:1.6;">
-              To ensure you receive our emails, please add
-              <span style="color:#aaaaaa;">noreply@somalireport.com</span>
-              to your address book or safe list.
-            </p>
-
-            <!-- Sent to -->
-            {% if recipient_email %}
-            <p style="margin:0 0 20px 0;color:#666666;font-family:Arial,sans-serif;font-size:11px;">
-              This email was sent to
-              <a href="mailto:{{ recipient_email }}" style="color:#888888;text-decoration:underline;">{{ recipient_email }}</a>
-            </p>
-            {% endif %}
-
-            <!-- Unsubscribe -->
-            {% if not is_preview %}
-            <p style="margin:0;color:#555555;font-family:Arial,sans-serif;font-size:11px;line-height:1.6;">
-              Receiving too many emails? &nbsp;
-              <a href="{{ unsubscribe_url }}" style="color:{{ newsletter.accent_color }};text-decoration:underline;">Unsubscribe</a>
-              &nbsp;and manage your email preferences.
-            </p>
-            {% endif %}
+            <!-- Bottom bar: copyright | unsubscribe -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;border-top:1px solid #1a1a1a;">
+              <tr>
+                <td style="padding:16px 32px;" valign="middle">
+                  <span style="color:#5a5a5a;font-family:Arial,Helvetica,sans-serif;font-size:11px;">&copy; {{ current_year }} Somali Report &nbsp;|&nbsp; All rights reserved</span>
+                </td>
+                <td align="right" style="padding:16px 32px;" valign="middle">
+                  {% if not is_preview %}
+                  <a href="{{ unsubscribe_url }}" style="color:{{ newsletter.accent_color }};font-family:Arial,Helvetica,sans-serif;font-size:11px;text-decoration:underline;font-weight:bold;">Unsubscribe</a>
+                  {% endif %}
+                </td>
+              </tr>
+            </table>
 
           </td>
         </tr>
