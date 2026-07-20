@@ -694,6 +694,7 @@ class NewsletterPublicViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return Newsletter.objects.filter(
             status='sent',
+            email_type='newsletter',
             is_deleted=False
         ).order_by('-sent_at')
 
