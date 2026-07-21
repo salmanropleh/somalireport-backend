@@ -8,6 +8,13 @@
   img { max-width: 100% !important; height: auto !important; }
   table { max-width: 100% !important; }
   * { box-sizing: border-box; }
+  @media only screen and (max-width: 600px) {
+    .masthead-logo { width: 100% !important; max-width: 100% !important; }
+    .footer-logo-td { display: block !important; width: 100% !important; text-align: center !important; padding-bottom: 12px !important; }
+    .footer-icons-td { display: block !important; width: 100% !important; text-align: center !important; }
+    .footer-icons-td a { margin: 0 4px !important; }
+    .footer-logo-img { width: 100% !important; max-width: 100% !important; }
+  }
 </style>
 </head>
 <body style="margin:0;padding:0;background-color:#f0f0f0;font-family:Georgia,'Times New Roman',serif;">
@@ -29,12 +36,10 @@
             <a href="{{ frontend_url }}" style="display:inline-block;text-decoration:none;">
               <img src="{{ frontend_url }}/logo-white-v2.png"
                    alt="Somali Report"
+                   class="masthead-logo"
                    width="200"
-                   style="width:200px;max-width:200px;height:auto;display:block;margin:0 auto 8px auto;border:0;">
+                   style="width:200px;max-width:200px;height:auto;display:block;margin:0 auto;border:0;">
             </a>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#ffffff;font-weight:500;">
-              Independent &nbsp;·&nbsp; Factual &nbsp;·&nbsp; In-Depth
-            </p>
           </td>
         </tr>
 
@@ -207,16 +212,17 @@
                   <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <!-- Left: logo -->
-                      <td valign="middle">
+                      <td class="footer-logo-td" valign="middle">
                         <a href="{{ frontend_url }}" style="display:inline-block;text-decoration:none;">
                           <img src="{{ frontend_url }}/logo-white-v2.png"
                                alt="Somali Report"
+                               class="footer-logo-img"
                                width="170"
                                style="width:170px;max-width:170px;height:auto;display:block;border:0;">
                         </a>
                       </td>
                       <!-- Right: social icons -->
-                      <td align="right" valign="middle">
+                      <td class="footer-icons-td" align="right" valign="middle">
                         {% if social_links.twitter %}
                         <a href="{{ social_links.twitter }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;">𝕏</a>
                         {% endif %}
@@ -246,7 +252,7 @@
               <tr>
                 <td style="padding:20px 32px 0 32px;">
                   <p style="margin:0 0 8px 0;color:#8f8f8f;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;">
-                    To ensure you receive our emails, please add <a href="mailto:noreply@somalireport.com" style="color:{{ newsletter.accent_color }};text-decoration:none;">noreply@somalireport.com</a> to your address book or safe list.
+                    We sent you this email because you subscribed or because we thought it would interest you. To ensure delivery, add <a href="mailto:noreply@somalireport.com" style="color:{{ newsletter.accent_color }};text-decoration:none;">noreply@somalireport.com</a> to your contacts.
                   </p>
                   {% if recipient_email %}
                   <p style="margin:0;color:#666666;font-family:Arial,Helvetica,sans-serif;font-size:11px;">
