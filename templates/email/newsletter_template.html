@@ -14,6 +14,14 @@
     .footer-icons-td { display: block !important; width: 100% !important; text-align: center !important; }
     .footer-icons-td a { margin: 0 4px !important; }
     .footer-logo-img { width: 100% !important; max-width: 100% !important; }
+    .footer-social-icon { width: 54px !important; height: 54px !important; line-height: 54px !important; font-size: 18px !important; }
+    .mob-pad { padding-left: 16px !important; padding-right: 16px !important; }
+    .mob-title { font-size: 22px !important; }
+    .mob-body { font-size: 16px !important; }
+    .mob-article-title { font-size: 19px !important; }
+    .mob-excerpt { font-size: 15px !important; }
+    .mob-readmore { font-size: 14px !important; }
+    .mob-date { font-size: 13px !important; }
   }
 </style>
 </head>
@@ -37,8 +45,8 @@
               <img src="{{ frontend_url }}/logo-white-v2.png"
                    alt="Somali Report"
                    class="masthead-logo"
-                   width="200"
-                   style="width:200px;max-width:200px;height:auto;display:block;margin:0 auto;border:0;">
+                   width="320"
+                   style="width:320px;max-width:320px;height:auto;display:block;margin:0 auto;border:0;">
             </a>
           </td>
         </tr>
@@ -57,8 +65,8 @@
 
         <!-- ═══ DATE BAR ═══ -->
         <tr>
-          <td style="background-color:{{ newsletter.accent_color }};padding:9px 40px;text-align:center;">
-            <span style="color:#ffffff;font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">
+          <td class="mob-pad" style="background-color:{{ newsletter.accent_color }};padding:9px 40px;text-align:center;">
+            <span class="mob-date" style="color:#ffffff;font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">
               {% if newsletter.sent_at %}{{ newsletter.sent_at|date:"F j, Y · g:i A" }} UTC{% else %}{{ send_date }} · {{ send_time }}{% endif %}
             </span>
           </td>
@@ -66,17 +74,17 @@
 
         <!-- ═══ TITLE + GREETING ═══ -->
         <tr>
-          <td style="padding:32px 40px 24px 40px;border-bottom:1px solid #eeeeee;">
+          <td class="mob-pad" style="padding:32px 40px 24px 40px;border-bottom:1px solid #eeeeee;">
             {% if newsletter.greeting_text %}
             <p style="margin:0 0 14px 0;color:#666666;font-size:16px;font-style:italic;font-family:Georgia,'Times New Roman',serif;">
               {{ newsletter.greeting_text }}
             </p>
             {% endif %}
-            <h2 style="margin:0 0 12px 0;color:#111111;font-size:24px;line-height:1.3;font-family:Georgia,'Times New Roman',serif;">
+            <h2 class="mob-title" style="margin:0 0 12px 0;color:#111111;font-size:24px;line-height:1.3;font-family:Georgia,'Times New Roman',serif;">
               {{ newsletter.title }}
             </h2>
             {% if newsletter.excerpt %}
-            <p style="margin:0;color:#555555;font-size:15px;line-height:1.7;font-family:Arial,sans-serif;">
+            <p class="mob-body" style="margin:0;color:#555555;font-size:15px;line-height:1.7;font-family:Arial,sans-serif;">
               {{ newsletter.excerpt }}
             </p>
             {% endif %}
@@ -86,7 +94,7 @@
         <!-- ═══ COMBINED CONTENT (articles + text blocks) ═══ -->
         {% if combined_content %}
         <tr>
-          <td style="padding:32px 40px 8px 40px;">
+          <td class="mob-pad" style="padding:32px 40px 8px 40px;">
             <p style="margin:0 0 28px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;font-family:Arial,sans-serif;border-bottom:1px solid #eeeeee;padding-bottom:12px;">
               In This Newsletter
             </p>
@@ -122,18 +130,18 @@
                   <p style="margin:0 0 5px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;font-family:Arial,sans-serif;">
                     {{ item.data.primary_category|default:"News" }}
                   </p>
-                  <h3 style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
+                  <h3 class="mob-article-title" style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
                     <a href="{{ frontend_url }}/article/{{ item.data.id }}/{{ item.data.slug }}" style="color:#111111;text-decoration:none;">
                       {{ item.data.title }}
                     </a>
                   </h3>
                   {% if item.data.excerpt %}
-                  <p style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
+                  <p class="mob-excerpt" style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
                     {{ item.data.excerpt|truncatewords:25 }}
                   </p>
                   {% endif %}
                   <a href="{{ frontend_url }}/article/{{ item.data.id }}/{{ item.data.slug }}"
-                     style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;letter-spacing:0.5px;">
+                     class="mob-readmore" style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;letter-spacing:0.5px;">
                     READ MORE →
                   </a>
                 </td>
@@ -147,7 +155,7 @@
 
         {% elif articles %}
         <tr>
-          <td style="padding:32px 40px 8px 40px;">
+          <td class="mob-pad" style="padding:32px 40px 8px 40px;">
             <p style="margin:0 0 28px 0;color:{{ newsletter.accent_color }};font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;font-family:Arial,sans-serif;border-bottom:1px solid #eeeeee;padding-bottom:12px;">
               In This Newsletter
             </p>
@@ -164,16 +172,16 @@
                 </td>
                 {% endif %}
                 <td valign="top">
-                  <h3 style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
+                  <h3 class="mob-article-title" style="margin:0 0 8px 0;font-size:17px;line-height:1.35;color:#111111;font-family:Georgia,'Times New Roman',serif;">
                     <a href="{{ frontend_url }}/article/{{ article.id }}/{{ article.slug }}" style="color:#111111;text-decoration:none;">{{ article.title }}</a>
                   </h3>
                   {% if article.excerpt %}
-                  <p style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
+                  <p class="mob-excerpt" style="margin:0 0 12px 0;color:#666666;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;">
                     {{ article.excerpt|truncatewords:25 }}
                   </p>
                   {% endif %}
                   <a href="{{ frontend_url }}/article/{{ article.id }}/{{ article.slug }}"
-                     style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;">
+                     class="mob-readmore" style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:{{ newsletter.accent_color }};text-decoration:none;">
                     READ MORE →
                   </a>
                 </td>
@@ -193,7 +201,7 @@
 
         <!-- ═══ VISIT SITE CTA ═══ -->
         <tr>
-          <td style="padding:8px 40px 36px 40px;text-align:center;border-bottom:3px solid {{ newsletter.accent_color }};">
+          <td class="mob-pad" style="padding:8px 40px 36px 40px;text-align:center;border-bottom:3px solid {{ newsletter.accent_color }};">
             <a href="{{ frontend_url }}"
                style="display:inline-block;padding:12px 32px;background-color:#1a3a6e;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;text-decoration:none;letter-spacing:1px;text-transform:uppercase;">
               Visit Somali Report
@@ -208,7 +216,7 @@
             <!-- Branding + social icons row -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="padding:28px 32px 0 32px;">
+                <td class="mob-pad" style="padding:28px 32px 0 32px;">
                   <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <!-- Left: logo -->
@@ -217,23 +225,23 @@
                           <img src="{{ frontend_url }}/logo-white-v2.png"
                                alt="Somali Report"
                                class="footer-logo-img"
-                               width="170"
-                               style="width:170px;max-width:170px;height:auto;display:block;border:0;">
+                               width="300"
+                               style="width:300px;max-width:300px;height:auto;display:block;border:0;">
                         </a>
                       </td>
                       <!-- Right: social icons -->
                       <td class="footer-icons-td" align="right" valign="middle">
                         {% if social_links.twitter %}
-                        <a href="{{ social_links.twitter }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;">𝕏</a>
+                        <a href="{{ social_links.twitter }}" class="footer-social-icon" style="display:inline-block;margin-left:10px;width:48px;height:48px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:48px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;">𝕏</a>
                         {% endif %}
                         {% if social_links.instagram %}
-                        <a href="{{ social_links.instagram }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:9px;font-weight:bold;">IG</a>
+                        <a href="{{ social_links.instagram }}" class="footer-social-icon" style="display:inline-block;margin-left:10px;width:48px;height:48px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:48px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;">IG</a>
                         {% endif %}
                         {% if social_links.linkedin %}
-                        <a href="{{ social_links.linkedin }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:9px;font-weight:bold;">in</a>
+                        <a href="{{ social_links.linkedin }}" class="footer-social-icon" style="display:inline-block;margin-left:10px;width:48px;height:48px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:48px;color:#cccccc;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;">in</a>
                         {% endif %}
                         {% if social_links.youtube %}
-                        <a href="{{ social_links.youtube }}" style="display:inline-block;margin-left:6px;width:28px;height:28px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:28px;color:#C9A84C;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:bold;">&#9658;</a>
+                        <a href="{{ social_links.youtube }}" class="footer-social-icon" style="display:inline-block;margin-left:10px;width:48px;height:48px;border-radius:50%;background:#161616;border:1px solid #2a2a2a;text-align:center;line-height:48px;color:#C9A84C;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;">&#9658;</a>
                         {% endif %}
                       </td>
                     </tr>
@@ -250,9 +258,9 @@
             <!-- Safe list note + sent to -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="padding:20px 32px 0 32px;">
+                <td class="mob-pad" style="padding:20px 32px 0 32px;">
                   <p style="margin:0 0 8px 0;color:#8f8f8f;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;">
-                    We sent you this email because you subscribed or because we thought it would interest you. To ensure delivery, add <a href="mailto:noreply@somalireport.com" style="color:{{ newsletter.accent_color }};text-decoration:none;">noreply@somalireport.com</a> to your contacts.
+                    We have sent you this email because you have either asked us to or because we think it will interest you. To ensure delivery, add <a href="mailto:noreply@somalireport.com" style="color:{{ newsletter.accent_color }};text-decoration:none;">noreply@somalireport.com</a> to your contacts.
                   </p>
                   {% if recipient_email %}
                   <p style="margin:0;color:#666666;font-family:Arial,Helvetica,sans-serif;font-size:11px;">
@@ -266,10 +274,10 @@
             <!-- Bottom bar: copyright | unsubscribe -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;border-top:1px solid #1a1a1a;">
               <tr>
-                <td style="padding:16px 32px;" valign="middle">
+                <td class="mob-pad" style="padding:16px 32px;" valign="middle">
                   <span style="color:#5a5a5a;font-family:Arial,Helvetica,sans-serif;font-size:11px;">&copy; {{ current_year }} Somali Report &nbsp;|&nbsp; All rights reserved</span>
                 </td>
-                <td align="right" style="padding:16px 32px;" valign="middle">
+                <td class="mob-pad" align="right" style="padding:16px 32px;" valign="middle">
                   {% if not is_preview %}
                   <a href="{{ unsubscribe_url }}" style="color:{{ newsletter.accent_color }};font-family:Arial,Helvetica,sans-serif;font-size:11px;text-decoration:underline;font-weight:bold;">Unsubscribe</a>
                   {% endif %}
